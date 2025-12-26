@@ -25,4 +25,12 @@
     color: hsl(var(--foreground));
     font-family: system-ui, -apple-system, sans-serif;
   }
+
+  svg {
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    display: inline-block;
+  }
 }

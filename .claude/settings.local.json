@@ -12,7 +12,11 @@
       "Bash(nvm list)",
       "Bash(source ~/.zshrc)",
       "Bash(source:*)",
-      "Bash(nvm use:*)"
+      "Bash(nvm use:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npx tsx:*)",
+      "Bash(ls:*)"
     ]
   }
 }
