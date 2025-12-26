@@ -4,7 +4,15 @@
       "Bash(npx create-next-app@latest . --typescript --tailwind --app --src-dir --import-alias \"@/*\" --use-npm --no-git)",
       "Bash(npm init:*)",
       "Bash(npm install:*)",
-      "Bash(npx tailwindcss:*)"
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node --version:*)",
+      "Bash(brew install:*)",
+      "Bash(nvm install:*)",
+      "Bash(nvm list)",
+      "Bash(source ~/.zshrc)",
+      "Bash(source:*)",
+      "Bash(nvm use:*)"
     ]
   }
 }
