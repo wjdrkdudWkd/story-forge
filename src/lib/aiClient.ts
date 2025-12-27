@@ -9,6 +9,7 @@
 import type { GenerateIdeaInput, IdeaResult } from "@/types/idea";
 import { mockGenerateIdea } from "./mockAiClient";
 import { logAI } from "./logAI";
+import { buildIdeaPrompt, IDEA_PROMPT_VERSION } from "./prompts";
 
 /**
  * 아이디어 생성
@@ -42,15 +43,14 @@ export async function generateIdea(
 
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드
+    const prompt = buildIdeaPrompt(input);
+
     // AI 로그 기록
     logAI({
       stage: "idea",
       mode,
-      prompt: JSON.stringify({
-        tone: input.form.tone,
-        realism: input.form.realism,
-        compactedPayload: input.compactedPayload,
-      }),
+      prompt,
       response: JSON.stringify({
         candidatesCount: result.candidates.length,
         state: result.state,
@@ -58,6 +58,14 @@ export async function generateIdea(
       model: mode === "mock" ? "mock-idea-v1" : undefined,
       latencyMs,
       ok: true,
+      meta: {
+        promptVersion: IDEA_PROMPT_VERSION,
+        inputPayload: {
+          tone: input.form.tone,
+          realism: input.form.realism,
+          compactedPayload: input.compactedPayload,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateIdea] Failed to log AI call:", err);
     });
@@ -66,15 +74,24 @@ export async function generateIdea(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드 (오류 로깅용)
+    const prompt = buildIdeaPrompt(input);
+
     // 오류 로그 기록
     logAI({
       stage: "idea",
       mode,
-      prompt: JSON.stringify(input.compactedPayload),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: IDEA_PROMPT_VERSION,
+        inputPayload: {
+          compactedPayload: input.compactedPayload,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateIdea] Failed to log AI error:", err);
     });

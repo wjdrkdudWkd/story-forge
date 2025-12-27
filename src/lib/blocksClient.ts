@@ -21,6 +21,12 @@ import {
   mockExpandOverview,
 } from "./mockBlocksClient";
 import { logAI } from "./logAI";
+import {
+  buildBlocksOverviewPrompt,
+  buildBlockDetailPrompt,
+  BLOCKS_OVERVIEW_PROMPT_VERSION,
+  BLOCK_DETAIL_PROMPT_VERSION,
+} from "./prompts";
 
 /**
  * 24블록 개요 생성
@@ -42,20 +48,30 @@ export async function generateBlocksOverview(
     const result = mockGenerateBlocksOverview(input);
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드
+    const prompt = buildBlocksOverviewPrompt(input);
+
     // AI 로그 기록
     logAI({
       stage: "blocks_overview",
       mode,
-      prompt: JSON.stringify({
-        logline: input.candidate.logline,
-        acts: input.acts?.acts.map((act) => act.key),
-      }),
+      prompt,
       response: JSON.stringify({
         blockCount: Object.keys(result.blocksByIndex).length,
       }),
       model: mode === "mock" ? "mock-blocks-overview-v1" : undefined,
       latencyMs,
       ok: true,
+      meta: {
+        promptVersion: BLOCKS_OVERVIEW_PROMPT_VERSION,
+        inputPayload: {
+          logline: input.candidate.logline,
+          synopsis: input.candidate.synopsis,
+          tone: input.state.tone,
+          seed: input.state.seed,
+          actKeys: input.acts?.acts.map((act) => act.key),
+        },
+      },
     }).catch((err) => {
       console.warn("[generateBlocksOverview] Failed to log AI call:", err);
     });
@@ -64,14 +80,23 @@ export async function generateBlocksOverview(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드 (오류 로깅용)
+    const prompt = buildBlocksOverviewPrompt(input);
+
     logAI({
       stage: "blocks_overview",
       mode,
-      prompt: JSON.stringify({ logline: input.candidate.logline }),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: BLOCKS_OVERVIEW_PROMPT_VERSION,
+        inputPayload: {
+          logline: input.candidate.logline,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateBlocksOverview] Failed to log AI error:", err);
     });
@@ -100,15 +125,14 @@ export async function generateBlockDetail(
     const result = mockGenerateBlockDetail(input);
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드
+    const prompt = buildBlockDetailPrompt(input);
+
     // AI 로그 기록
     logAI({
       stage: "block_detail",
       mode,
-      prompt: JSON.stringify({
-        index: input.index,
-        preset: input.preset,
-        sentenceRange: input.sentenceRange,
-      }),
+      prompt,
       response: JSON.stringify({
         source: result.source,
         beatLength: result.beat.length,
@@ -117,8 +141,13 @@ export async function generateBlockDetail(
       latencyMs,
       ok: true,
       meta: {
-        index: input.index,
-        preset: input.preset,
+        promptVersion: BLOCK_DETAIL_PROMPT_VERSION,
+        inputPayload: {
+          blockIndex: input.index,
+          preset: input.preset,
+          sentenceRange: input.sentenceRange,
+          tone: input.state.tone,
+        },
       },
     }).catch((err) => {
       console.warn("[generateBlockDetail] Failed to log AI call:", err);
@@ -128,14 +157,23 @@ export async function generateBlockDetail(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드 (오류 로깅용)
+    const prompt = buildBlockDetailPrompt(input);
+
     logAI({
       stage: "block_detail",
       mode,
-      prompt: JSON.stringify({ index: input.index }),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: BLOCK_DETAIL_PROMPT_VERSION,
+        inputPayload: {
+          blockIndex: input.index,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateBlockDetail] Failed to log AI error:", err);
     });
@@ -164,20 +202,26 @@ export async function regenerateOverview(
     const result = mockRegenerateOverview(input);
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 (재생성은 간단한 요청)
+    const prompt = `Regenerate overview for block ${input.index}`;
+
     // AI 로그 기록
     logAI({
       stage: "block_overview_regenerate",
       mode,
-      prompt: JSON.stringify({
-        index: input.index,
-      }),
+      prompt,
       response: JSON.stringify({
         hookCount: result.hooks.length,
       }),
       model: mode === "mock" ? "mock-block-overview-v1" : undefined,
       latencyMs,
       ok: true,
-      meta: { index: input.index },
+      meta: {
+        promptVersion: "block-overview-regenerate-v1",
+        inputPayload: {
+          blockIndex: input.index,
+        },
+      },
     }).catch((err) => {
       console.warn("[regenerateOverview] Failed to log AI call:", err);
     });
@@ -186,14 +230,22 @@ export async function regenerateOverview(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    const prompt = `Regenerate overview for block ${input.index}`;
+
     logAI({
       stage: "block_overview_regenerate",
       mode,
-      prompt: JSON.stringify({ index: input.index }),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: "block-overview-regenerate-v1",
+        inputPayload: {
+          blockIndex: input.index,
+        },
+      },
     }).catch((err) => {
       console.warn("[regenerateOverview] Failed to log AI error:", err);
     });
@@ -222,14 +274,14 @@ export async function expandOverview(
     const result = mockExpandOverview(input);
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 (확장 요청)
+    const prompt = `Expand overview for block ${input.index} with preset: ${input.preset || "default"}`;
+
     // AI 로그 기록
     logAI({
       stage: "block_overview_expand",
       mode,
-      prompt: JSON.stringify({
-        index: input.index,
-        preset: input.preset,
-      }),
+      prompt,
       response: JSON.stringify({
         hookCount: result.hooks.length,
       }),
@@ -237,8 +289,11 @@ export async function expandOverview(
       latencyMs,
       ok: true,
       meta: {
-        index: input.index,
-        preset: input.preset,
+        promptVersion: "block-overview-expand-v1",
+        inputPayload: {
+          blockIndex: input.index,
+          preset: input.preset,
+        },
       },
     }).catch((err) => {
       console.warn("[expandOverview] Failed to log AI call:", err);
@@ -248,14 +303,23 @@ export async function expandOverview(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    const prompt = `Expand overview for block ${input.index} with preset: ${input.preset || "default"}`;
+
     logAI({
       stage: "block_overview_expand",
       mode,
-      prompt: JSON.stringify({ index: input.index, preset: input.preset }),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: "block-overview-expand-v1",
+        inputPayload: {
+          blockIndex: input.index,
+          preset: input.preset,
+        },
+      },
     }).catch((err) => {
       console.warn("[expandOverview] Failed to log AI error:", err);
     });

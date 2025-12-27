@@ -8,6 +8,7 @@
 import type { GenerateActsInput, ActsResult } from "@/types/acts";
 import { mockGenerateActs } from "./mockActsClient";
 import { logAI } from "./logAI";
+import { buildActsPrompt, ACTS_PROMPT_VERSION } from "./prompts";
 
 /**
  * 5막 구조 생성
@@ -34,15 +35,14 @@ export async function generateActs(
     const result = mockGenerateActs(input);
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드
+    const prompt = buildActsPrompt(input);
+
     // AI 로그 기록
     logAI({
       stage: "acts",
       mode,
-      prompt: JSON.stringify({
-        logline: input.logline,
-        synopsis: input.synopsis,
-        tone: input.state.tone,
-      }),
+      prompt,
       response: JSON.stringify({
         acts: result.acts.map((act) => ({
           key: act.key,
@@ -52,6 +52,15 @@ export async function generateActs(
       model: mode === "mock" ? "mock-acts-v1" : undefined,
       latencyMs,
       ok: true,
+      meta: {
+        promptVersion: ACTS_PROMPT_VERSION,
+        inputPayload: {
+          logline: input.logline,
+          synopsis: input.synopsis,
+          tone: input.state.tone,
+          motifsRanked: input.state.motifsRanked,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateActs] Failed to log AI call:", err);
     });
@@ -60,15 +69,26 @@ export async function generateActs(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
+    // 프롬프트 빌드 (오류 로깅용)
+    const prompt = buildActsPrompt(input);
+
     // 오류 로그 기록
     logAI({
       stage: "acts",
       mode,
-      prompt: JSON.stringify(input),
+      prompt,
       response: "",
       latencyMs,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
+      meta: {
+        promptVersion: ACTS_PROMPT_VERSION,
+        inputPayload: {
+          logline: input.logline,
+          synopsis: input.synopsis,
+          tone: input.state.tone,
+        },
+      },
     }).catch((err) => {
       console.warn("[generateActs] Failed to log AI error:", err);
     });
