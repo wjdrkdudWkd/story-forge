@@ -24,7 +24,10 @@ export interface BlockDetailModalProps {
   memory: BlocksMemory;
   onSelectOverviewVariant: (variantId: string) => void;
   onSelectDetailVariant: (variantId: string) => void;
-  onGenerateDetail: (preset?: ExpandPreset) => Promise<BlockDetailVariant>;
+  onGenerateDetail: () => void;
+  onExpandDetail: (preset?: ExpandPreset) => void;
+  canGenerateDetail: boolean;
+  isCoolingDown: boolean;
 }
 
 export function BlockDetailModal({
@@ -36,9 +39,11 @@ export function BlockDetailModal({
   onSelectOverviewVariant,
   onSelectDetailVariant,
   onGenerateDetail,
+  onExpandDetail,
+  canGenerateDetail,
+  isCoolingDown,
 }: BlockDetailModalProps) {
   const [activeTab, setActiveTab] = useState<"content" | "overview-versions" | "detail-versions">("content");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [showPresetMenu, setShowPresetMenu] = useState(false);
 
   const selectedOverview = node.overviewVariants.find(
@@ -58,28 +63,19 @@ export function BlockDetailModal({
     { value: "add_dialogue", label: "대사 추가" },
   ];
 
-  // 모달이 열릴 때 detail이 없으면 자동 생성
-  useEffect(() => {
-    if (isOpen && !hasDetail && !isGenerating) {
-      handleGenerateDetail();
-    }
-  }, [isOpen, hasDetail]);
-
-  const handleGenerateDetail = async (preset?: ExpandPreset) => {
-    setIsGenerating(true);
-    try {
-      await onGenerateDetail(preset);
-      if (preset) {
-        // Preset으로 생성한 경우 버전 탭 자동 열기
-        setActiveTab("detail-versions");
-      }
-    } catch (error) {
-      alert("상세 생성 중 오류가 발생했습니다.");
-    } finally {
-      setIsGenerating(false);
-      setShowPresetMenu(false);
-    }
+  const handleExpandDetailClick = (preset: ExpandPreset) => {
+    onExpandDetail(preset);
+    setShowPresetMenu(false);
+    setActiveTab("detail-versions");
   };
+
+  const getDisabledReason = (): string | null => {
+    if (isCoolingDown) return "잠시 후 다시 시도해주세요 (쿨다운)";
+    if (!canGenerateDetail) return "이번 세션의 상세 생성 한도에 도달했어요.";
+    return null;
+  };
+
+  const isDisabled = isCoolingDown || !canGenerateDetail;
 
   if (!isOpen) return null;
 
@@ -167,32 +163,60 @@ export function BlockDetailModal({
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-700">상세 (Beat)</h3>
                   {hasDetail && (
-                    <div className="relative">
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setShowPresetMenu(!showPresetMenu)}
-                        className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-                        disabled={isGenerating}
+                        onClick={() => onExpandDetail()}
+                        className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isDisabled}
+                        title={getDisabledReason() || "6~8문장으로 더 길게 확장"}
                       >
-                        {isGenerating ? "생성 중..." : "+ 발전시키기"}
+                        더 길게 확장
                       </button>
-                      {showPresetMenu && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[120px]">
-                          {presetOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => handleGenerateDetail(option.value)}
-                              className="w-full px-3 py-1.5 text-xs text-left hover:bg-gray-100"
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowPresetMenu(!showPresetMenu)}
+                          className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={isDisabled}
+                          title={getDisabledReason() || "프리셋으로 발전시키기"}
+                        >
+                          + 발전시키기
+                        </button>
+                        {showPresetMenu && (
+                          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[120px]">
+                            {presetOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                onClick={() => handleExpandDetailClick(option.value)}
+                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-gray-100"
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
-                {isGenerating ? (
-                  <div className="text-sm text-gray-600">상세 내용을 생성하는 중...</div>
+                {!hasDetail ? (
+                  <div className="space-y-3 pt-2">
+                    <p className="text-sm text-gray-500">
+                      아직 상세 내용이 없습니다. 버튼을 클릭하여 생성해주세요.
+                    </p>
+                    <button
+                      onClick={onGenerateDetail}
+                      className="w-full px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={isDisabled}
+                      title={getDisabledReason() || "상세 작성하기"}
+                    >
+                      {isDisabled && getDisabledReason() ? getDisabledReason() : "상세 작성하기"}
+                    </button>
+                    {isDisabled && (
+                      <p className="text-xs text-red-600 text-center">
+                        {getDisabledReason()}
+                      </p>
+                    )}
+                  </div>
                 ) : selectedDetail ? (
                   <>
                     <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
@@ -216,9 +240,7 @@ export function BlockDetailModal({
                       </div>
                     )}
                   </>
-                ) : (
-                  <div className="text-sm text-gray-500">상세 내용이 없습니다.</div>
-                )}
+                ) : null}
               </div>
             </div>
           )}

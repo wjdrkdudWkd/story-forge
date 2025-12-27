@@ -78,6 +78,7 @@ export interface GenerateBlockDetailInput {
   state: IdeaState;
   memory: BlocksMemory;
   preset?: ExpandPreset;
+  sentenceRange?: { min: number; max: number };
   mode?: "mock" | "server";
 }
 

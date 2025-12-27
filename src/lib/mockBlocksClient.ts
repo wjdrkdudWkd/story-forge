@@ -78,10 +78,10 @@ export function mockGenerateBlocksOverview(
 export function mockGenerateBlockDetail(
   input: GenerateBlockDetailInput
 ): BlockDetailVariant {
-  const { index, spec, overview, state, memory, preset } = input;
+  const { index, spec, overview, state, memory, preset, sentenceRange } = input;
   const rng = seededRandom(state.seed + index);
 
-  const beat = generateBeat(spec, overview, state.tone, preset, rng);
+  const beat = generateBeat(spec, overview, state.tone, preset, sentenceRange, rng);
   const microHooks = generateMicroHooks(overview.hooks, rng);
 
   return {
@@ -197,6 +197,7 @@ function generateBeat(
   overview: BlockOverviewVariant,
   tone: ToneKey,
   preset: ExpandPreset | undefined,
+  sentenceRange: { min: number; max: number } | undefined,
   rng: () => number
 ): string {
   const baseTemplates = getBeatTemplates(spec, tone);
@@ -207,7 +208,36 @@ function generateBeat(
     beat = applyPresetToBeat(beat, preset, tone, rng);
   }
 
-  return beat;
+  // sentenceRange에 맞춰 문장 수 조정
+  const range = sentenceRange || { min: 3, max: 4 };
+  const targetSentences = Math.floor(rng() * (range.max - range.min + 1)) + range.min;
+
+  // 현재 문장을 분리하고 목표 문장 수에 맞춰 조정
+  const sentences = beat.split('. ').filter(s => s.trim());
+
+  if (sentences.length < targetSentences) {
+    // 문장이 부족하면 추가
+    const fillers = [
+      '이는 앞으로의 전개에 중요한 영향을 미친다',
+      '주변 상황이 복잡하게 얽혀간다',
+      '시간이 흐르며 긴장감이 고조된다',
+      '인물들의 내면이 점차 드러난다',
+      '예상치 못한 변수가 작용한다',
+      '과거의 사건이 현재와 연결된다',
+      '선택의 무게가 점점 커진다',
+    ];
+
+    while (sentences.length < targetSentences && fillers.length > 0) {
+      const fillerIdx = Math.floor(rng() * fillers.length);
+      sentences.push(fillers[fillerIdx]);
+      fillers.splice(fillerIdx, 1);
+    }
+  } else if (sentences.length > targetSentences) {
+    // 문장이 많으면 줄임 (첫 문장들 유지)
+    sentences.splice(targetSentences);
+  }
+
+  return sentences.join('. ') + '.';
 }
 
 function generateMicroHooks(hooks: string[], rng: () => number): string[] {

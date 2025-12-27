@@ -15,24 +15,39 @@ import type {
   BlockOverviewVariant,
   ExpandPreset,
 } from "@/types/blocks";
+import type { DetailPolicy } from "@/config/policy";
 import { Button } from "./ui/button";
-import {
-  generateBlockDetail,
-  regenerateOverview,
-  expandOverview,
-} from "@/lib/blocksClient";
 import { BlockDetailModal } from "./BlockDetailModal";
 
 export interface BlocksPanelProps {
   draft: BlocksDraft;
   onBack: () => void;
   onUpdateDraft: (next: BlocksDraft) => void;
+  policy: DetailPolicy;
+  detailGenCount: number;
+  canGenerateDetail: boolean;
+  isCoolingDown: (index: number) => boolean;
+  onRegenerateOverview: (index: BlockIndex) => void;
+  onExpandOverview: (index: BlockIndex, preset: ExpandPreset) => void;
+  onGenerateDetail: (index: BlockIndex) => void;
+  onExpandDetail: (index: BlockIndex, preset?: ExpandPreset) => void;
 }
 
-export function BlocksPanel({ draft, onBack, onUpdateDraft }: BlocksPanelProps) {
+export function BlocksPanel({
+  draft,
+  onBack,
+  onUpdateDraft,
+  policy,
+  detailGenCount,
+  canGenerateDetail,
+  isCoolingDown,
+  onRegenerateOverview,
+  onExpandOverview,
+  onGenerateDetail,
+  onExpandDetail,
+}: BlocksPanelProps) {
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<BlockIndex | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   // Act별로 블록 그룹화
   const blocksByAct = {
@@ -45,88 +60,6 @@ export function BlocksPanel({ draft, onBack, onUpdateDraft }: BlocksPanelProps) 
   const handleBlockClick = (index: BlockIndex) => {
     setSelectedBlockIndex(index);
     setIsDetailModalOpen(true);
-  };
-
-  const handleRegenerateOverview = async (index: BlockIndex) => {
-    const actionKey = `regenerate-${index}`;
-    setLoadingAction(actionKey);
-
-    try {
-      const node = draft.blocksByIndex[index];
-      const spec = draft.specs.find((s) => s.index === index)!;
-      const currentOverview = node.overviewVariants.find(
-        (v) => v.id === node.selectedOverviewId
-      )!;
-
-      const newVariant = await regenerateOverview({
-        index,
-        spec,
-        currentOverview,
-        state: { seed: Date.now(), tone: "light" } as any, // TODO: get from context
-        memory: draft.memory,
-      });
-
-      // 새 variant 추가
-      const updatedNode: BlockNode = {
-        ...node,
-        overviewVariants: [...node.overviewVariants, newVariant],
-        selectedOverviewId: newVariant.id,
-      };
-
-      onUpdateDraft({
-        ...draft,
-        blocksByIndex: {
-          ...draft.blocksByIndex,
-          [index]: updatedNode,
-        },
-      });
-    } catch (error) {
-      console.error("개요 재생성 실패:", error);
-      alert("개요 재생성 중 오류가 발생했습니다.");
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-
-  const handleExpandOverview = async (index: BlockIndex, preset: ExpandPreset) => {
-    const actionKey = `expand-${index}-${preset}`;
-    setLoadingAction(actionKey);
-
-    try {
-      const node = draft.blocksByIndex[index];
-      const spec = draft.specs.find((s) => s.index === index)!;
-      const currentOverview = node.overviewVariants.find(
-        (v) => v.id === node.selectedOverviewId
-      )!;
-
-      const newVariant = await expandOverview({
-        index,
-        spec,
-        currentOverview,
-        preset,
-        state: { seed: Date.now(), tone: "light" } as any,
-        memory: draft.memory,
-      });
-
-      const updatedNode: BlockNode = {
-        ...node,
-        overviewVariants: [...node.overviewVariants, newVariant],
-        selectedOverviewId: newVariant.id,
-      };
-
-      onUpdateDraft({
-        ...draft,
-        blocksByIndex: {
-          ...draft.blocksByIndex,
-          [index]: updatedNode,
-        },
-      });
-    } catch (error) {
-      console.error("개요 발전시키기 실패:", error);
-      alert("개요 발전시키기 중 오류가 발생했습니다.");
-    } finally {
-      setLoadingAction(null);
-    }
   };
 
   const handleSelectOverviewVariant = (index: BlockIndex, variantId: string) => {
@@ -161,42 +94,6 @@ export function BlocksPanel({ draft, onBack, onUpdateDraft }: BlocksPanelProps) 
     });
   };
 
-  const handleGenerateDetail = async (index: BlockIndex, preset?: ExpandPreset) => {
-    try {
-      const node = draft.blocksByIndex[index];
-      const spec = draft.specs.find((s) => s.index === index)!;
-      const overview = node.overviewVariants.find((v) => v.id === node.selectedOverviewId)!;
-
-      const newDetail = await generateBlockDetail({
-        index,
-        spec,
-        overview,
-        state: { seed: Date.now(), tone: "light" } as any,
-        memory: draft.memory,
-        preset,
-      });
-
-      const updatedNode: BlockNode = {
-        ...node,
-        detailVariants: [...node.detailVariants, newDetail],
-        selectedDetailId: newDetail.id,
-      };
-
-      onUpdateDraft({
-        ...draft,
-        blocksByIndex: {
-          ...draft.blocksByIndex,
-          [index]: updatedNode,
-        },
-      });
-
-      return newDetail;
-    } catch (error) {
-      console.error("상세 생성 실패:", error);
-      throw error;
-    }
-  };
-
   return (
     <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
       <div className="space-y-2">
@@ -219,9 +116,9 @@ export function BlocksPanel({ draft, onBack, onUpdateDraft }: BlocksPanelProps) 
                 node={draft.blocksByIndex[index]}
                 spec={draft.specs.find((s) => s.index === index)!}
                 onClick={() => handleBlockClick(index)}
-                onRegenerate={() => handleRegenerateOverview(index)}
-                onExpand={(preset) => handleExpandOverview(index, preset)}
-                isLoading={!!(loadingAction?.startsWith(`regenerate-${index}`) || loadingAction?.startsWith(`expand-${index}`))}
+                onRegenerate={() => onRegenerateOverview(index)}
+                onExpand={(preset) => onExpandOverview(index, preset)}
+                isCoolingDown={isCoolingDown(index)}
               />
             ))}
           </div>
@@ -262,7 +159,10 @@ export function BlocksPanel({ draft, onBack, onUpdateDraft }: BlocksPanelProps) 
           onSelectDetailVariant={(variantId) =>
             handleSelectDetailVariant(selectedBlockIndex, variantId)
           }
-          onGenerateDetail={(preset) => handleGenerateDetail(selectedBlockIndex, preset)}
+          onGenerateDetail={() => onGenerateDetail(selectedBlockIndex)}
+          onExpandDetail={(preset) => onExpandDetail(selectedBlockIndex, preset)}
+          canGenerateDetail={canGenerateDetail}
+          isCoolingDown={isCoolingDown(selectedBlockIndex)}
         />
       )}
     </div>
@@ -279,7 +179,7 @@ interface BlockCardProps {
   onClick: () => void;
   onRegenerate: () => void;
   onExpand: (preset: ExpandPreset) => void;
-  isLoading: boolean;
+  isCoolingDown: boolean;
 }
 
 function BlockCard({
@@ -288,7 +188,7 @@ function BlockCard({
   onClick,
   onRegenerate,
   onExpand,
-  isLoading,
+  isCoolingDown,
 }: BlockCardProps) {
   const [showActions, setShowActions] = useState(false);
   const [showPresetMenu, setShowPresetMenu] = useState(false);
@@ -344,15 +244,16 @@ function BlockCard({
       )}
 
       {/* Hover 액션 버튼 */}
-      {showActions && !isLoading && (
+      {showActions && (
         <div className="absolute top-2 right-2 flex gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onRegenerate();
+              if (!isCoolingDown) onRegenerate();
             }}
-            className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100"
-            title="다시 생성"
+            className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isCoolingDown}
+            title={isCoolingDown ? "잠시 후 다시 시도" : "다시 생성"}
           >
             🔄
           </button>
@@ -360,14 +261,15 @@ function BlockCard({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setShowPresetMenu(!showPresetMenu);
+                if (!isCoolingDown) setShowPresetMenu(!showPresetMenu);
               }}
-              className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100"
-              title="발전시키기"
+              className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isCoolingDown}
+              title={isCoolingDown ? "잠시 후 다시 시도" : "발전시키기"}
             >
               ✨
             </button>
-            {showPresetMenu && (
+            {showPresetMenu && !isCoolingDown && (
               <div className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[120px]">
                 {presetOptions.map((option) => (
                   <button
@@ -385,13 +287,6 @@ function BlockCard({
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* 로딩 표시 */}
-      {isLoading && (
-        <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded">
-          <div className="text-xs text-gray-600">생성 중...</div>
         </div>
       )}
     </div>

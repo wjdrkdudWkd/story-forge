@@ -8,11 +8,12 @@ import { BlocksPanel } from "@/components/BlocksPanel";
 import type { IdeaFormState } from "@/types/form";
 import type { IdeaResult, GenerateIdeaInput, IdeaCandidate } from "@/types/idea";
 import type { ActsResult, GenerateActsInput } from "@/types/acts";
-import type { BlocksDraft, GenerateBlocksOverviewInput } from "@/types/blocks";
+import type { BlocksDraft, GenerateBlocksOverviewInput, BlockIndex, ExpandPreset } from "@/types/blocks";
 import { generateIdea, compactFormPayload } from "@/lib/aiClient";
 import { generateActs } from "@/lib/actsClient";
-import { generateBlocksOverview } from "@/lib/blocksClient";
+import { generateBlocksOverview, generateBlockDetail, regenerateOverview, expandOverview } from "@/lib/blocksClient";
 import { generateSeed } from "@/lib/random";
+import { DEFAULT_DETAIL_POLICY } from "@/config/policy";
 
 type ViewState = "input" | "loading" | "output" | "confirmed" | "acts_loading" | "acts" | "blocks_loading" | "blocks";
 
@@ -22,6 +23,11 @@ export default function Home() {
   const [confirmedIndex, setConfirmedIndex] = useState<number | null>(null);
   const [actsResult, setActsResult] = useState<ActsResult | null>(null);
   const [blocksDraft, setBlocksDraft] = useState<BlocksDraft | null>(null);
+
+  // 정책 및 세션 카운터
+  const policy = DEFAULT_DETAIL_POLICY;
+  const [detailGenCount, setDetailGenCount] = useState(0);
+  const [lastActionAtByIndex, setLastActionAtByIndex] = useState<Record<number, number>>({});
 
   // 아이디어 생성 핸들러
   const handleGenerate = async (form: IdeaFormState) => {
@@ -145,6 +151,254 @@ export default function Home() {
     setBlocksDraft(nextDraft);
   };
 
+  // === 정책 헬퍼 함수 ===
+  const canGenerateDetail = (): boolean => {
+    return detailGenCount < policy.maxDetailGenerationsPerSession;
+  };
+
+  const isCoolingDown = (index: number): boolean => {
+    const lastActionAt = lastActionAtByIndex[index];
+    if (!lastActionAt) return false;
+    return Date.now() - lastActionAt < policy.actionCooldownMs;
+  };
+
+  const markAction = (index: number) => {
+    setLastActionAtByIndex((prev) => ({
+      ...prev,
+      [index]: Date.now(),
+    }));
+  };
+
+  const consumeDetailQuota = () => {
+    setDetailGenCount((prev) => prev + 1);
+  };
+
+  // === 블록 액션 핸들러들 ===
+
+  // 개요 재생성
+  const handleRegenerateOverview = async (index: BlockIndex) => {
+    if (!blocksDraft || !result) return;
+    if (isCoolingDown(index)) return;
+
+    markAction(index);
+
+    const spec = blocksDraft.specs.find((s) => s.index === index);
+    const block = blocksDraft.blocksByIndex[index];
+    if (!spec || !block) return;
+
+    const currentOverview = block.overviewVariants.find(
+      (v) => v.id === block.selectedOverviewId
+    );
+    if (!currentOverview) return;
+
+    try {
+      const newOverview = await regenerateOverview({
+        index,
+        spec,
+        currentOverview,
+        state: result.state,
+        memory: blocksDraft.memory,
+      });
+
+      const updatedDraft = {
+        ...blocksDraft,
+        blocksByIndex: {
+          ...blocksDraft.blocksByIndex,
+          [index]: {
+            ...block,
+            overviewVariants: [...block.overviewVariants, newOverview],
+            selectedOverviewId: newOverview.id,
+          },
+        },
+      };
+
+      setBlocksDraft(updatedDraft);
+    } catch (error) {
+      console.error("개요 재생성 실패:", error);
+    }
+  };
+
+  // 개요 발전시키기
+  const handleExpandOverview = async (index: BlockIndex, preset: ExpandPreset) => {
+    if (!blocksDraft || !result) return;
+    if (isCoolingDown(index)) return;
+
+    markAction(index);
+
+    const spec = blocksDraft.specs.find((s) => s.index === index);
+    const block = blocksDraft.blocksByIndex[index];
+    if (!spec || !block) return;
+
+    const currentOverview = block.overviewVariants.find(
+      (v) => v.id === block.selectedOverviewId
+    );
+    if (!currentOverview) return;
+
+    try {
+      const newOverview = await expandOverview({
+        index,
+        spec,
+        currentOverview,
+        preset,
+        state: result.state,
+        memory: blocksDraft.memory,
+      });
+
+      const updatedDraft = {
+        ...blocksDraft,
+        blocksByIndex: {
+          ...blocksDraft.blocksByIndex,
+          [index]: {
+            ...block,
+            overviewVariants: [...block.overviewVariants, newOverview],
+            selectedOverviewId: newOverview.id,
+          },
+        },
+      };
+
+      setBlocksDraft(updatedDraft);
+    } catch (error) {
+      console.error("개요 발전 실패:", error);
+    }
+  };
+
+  // 상세 생성 (기본 sentenceRange)
+  const handleGenerateDetail = async (index: BlockIndex) => {
+    if (!blocksDraft || !result) return;
+    if (isCoolingDown(index)) return;
+    if (!canGenerateDetail()) return;
+
+    consumeDetailQuota();
+    markAction(index);
+
+    const spec = blocksDraft.specs.find((s) => s.index === index);
+    const block = blocksDraft.blocksByIndex[index];
+    if (!spec || !block) return;
+
+    const currentOverview = block.overviewVariants.find(
+      (v) => v.id === block.selectedOverviewId
+    );
+    if (!currentOverview) return;
+
+    try {
+      const newDetail = await generateBlockDetail({
+        index,
+        spec,
+        overview: currentOverview,
+        state: result.state,
+        memory: blocksDraft.memory,
+        sentenceRange: policy.detailSentenceRange,
+      });
+
+      // detailVariants 최대 3 유지 (선택된 것은 보호)
+      let updatedDetailVariants = [...block.detailVariants, newDetail];
+      if (updatedDetailVariants.length > policy.maxDetailVariantsPerBlock) {
+        // 선택된 variant 찾기
+        const selectedId = block.selectedDetailId;
+        const selectedIndex = updatedDetailVariants.findIndex((v) => v.id === selectedId);
+
+        // 가장 오래된 non-selected variant 제거
+        if (selectedIndex !== -1) {
+          // 선택된 것은 보호
+          const nonSelected = updatedDetailVariants.filter((v) => v.id !== selectedId);
+          nonSelected.shift(); // 가장 오래된 것 제거
+          updatedDetailVariants = [
+            updatedDetailVariants[selectedIndex],
+            ...nonSelected,
+          ];
+        } else {
+          // 선택된 것 없으면 그냥 가장 오래된 것 제거
+          updatedDetailVariants.shift();
+        }
+      }
+
+      const updatedDraft = {
+        ...blocksDraft,
+        blocksByIndex: {
+          ...blocksDraft.blocksByIndex,
+          [index]: {
+            ...block,
+            detailVariants: updatedDetailVariants,
+            selectedDetailId: newDetail.id,
+          },
+        },
+      };
+
+      setBlocksDraft(updatedDraft);
+    } catch (error) {
+      console.error("상세 생성 실패:", error);
+    }
+  };
+
+  // 상세 확장 (더 길게 / 프리셋)
+  const handleExpandDetail = async (
+    index: BlockIndex,
+    preset?: ExpandPreset,
+    sentenceRange?: { min: number; max: number }
+  ) => {
+    if (!blocksDraft || !result) return;
+    if (isCoolingDown(index)) return;
+    if (!canGenerateDetail()) return;
+
+    consumeDetailQuota();
+    markAction(index);
+
+    const spec = blocksDraft.specs.find((s) => s.index === index);
+    const block = blocksDraft.blocksByIndex[index];
+    if (!spec || !block) return;
+
+    const currentOverview = block.overviewVariants.find(
+      (v) => v.id === block.selectedOverviewId
+    );
+    if (!currentOverview) return;
+
+    try {
+      const newDetail = await generateBlockDetail({
+        index,
+        spec,
+        overview: currentOverview,
+        state: result.state,
+        memory: blocksDraft.memory,
+        preset,
+        sentenceRange: sentenceRange || policy.expandSentenceRange,
+      });
+
+      // detailVariants 최대 3 유지 (선택된 것은 보호)
+      let updatedDetailVariants = [...block.detailVariants, newDetail];
+      if (updatedDetailVariants.length > policy.maxDetailVariantsPerBlock) {
+        const selectedId = block.selectedDetailId;
+        const selectedIndex = updatedDetailVariants.findIndex((v) => v.id === selectedId);
+
+        if (selectedIndex !== -1) {
+          const nonSelected = updatedDetailVariants.filter((v) => v.id !== selectedId);
+          nonSelected.shift();
+          updatedDetailVariants = [
+            updatedDetailVariants[selectedIndex],
+            ...nonSelected,
+          ];
+        } else {
+          updatedDetailVariants.shift();
+        }
+      }
+
+      const updatedDraft = {
+        ...blocksDraft,
+        blocksByIndex: {
+          ...blocksDraft.blocksByIndex,
+          [index]: {
+            ...block,
+            detailVariants: updatedDetailVariants,
+            selectedDetailId: newDetail.id,
+          },
+        },
+      };
+
+      setBlocksDraft(updatedDraft);
+    } catch (error) {
+      console.error("상세 확장 실패:", error);
+    }
+  };
+
   return (
     <main className="min-h-screen p-8">
       {/* Input 화면 */}
@@ -259,6 +513,14 @@ export default function Home() {
           draft={blocksDraft}
           onBack={handleBackFromBlocks}
           onUpdateDraft={handleUpdateDraft}
+          policy={policy}
+          detailGenCount={detailGenCount}
+          canGenerateDetail={canGenerateDetail()}
+          isCoolingDown={isCoolingDown}
+          onRegenerateOverview={handleRegenerateOverview}
+          onExpandOverview={handleExpandOverview}
+          onGenerateDetail={handleGenerateDetail}
+          onExpandDetail={handleExpandDetail}
         />
       )}
     </main>
