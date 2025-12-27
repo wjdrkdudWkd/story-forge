@@ -18,6 +18,7 @@ import type {
 import type { DetailPolicy } from "@/config/policy";
 import { Button } from "./ui/button";
 import { BlockDetailModal } from "./BlockDetailModal";
+import { track } from "@/lib/track";
 
 export interface BlocksPanelProps {
   draft: BlocksDraft;
@@ -58,6 +59,14 @@ export function BlocksPanel({
   };
 
   const handleBlockClick = (index: BlockIndex) => {
+    // Track: 블록 열기
+    track({
+      name: "block_opened",
+      meta: {
+        index,
+      },
+    });
+
     setSelectedBlockIndex(index);
     setIsDetailModalOpen(true);
   };
@@ -76,6 +85,16 @@ export function BlocksPanel({
         [index]: updatedNode,
       },
     });
+
+    // Track: variant 선택
+    track({
+      name: "block_variant_selected",
+      meta: {
+        index,
+        type: "overview",
+        selectedId: variantId,
+      },
+    });
   };
 
   const handleSelectDetailVariant = (index: BlockIndex, variantId: string) => {
@@ -90,6 +109,16 @@ export function BlocksPanel({
       blocksByIndex: {
         ...draft.blocksByIndex,
         [index]: updatedNode,
+      },
+    });
+
+    // Track: variant 선택
+    track({
+      name: "block_variant_selected",
+      meta: {
+        index,
+        type: "detail",
+        selectedId: variantId,
       },
     });
   };

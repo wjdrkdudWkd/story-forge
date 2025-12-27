@@ -38,6 +38,13 @@ export type {
   ExpandOverviewInput,
 } from "./blocks";
 
+// Analytics/Event logging 계약
+export type {
+  EventName,
+  EventRecord,
+  TrackEventInput,
+} from "./events";
+
 /**
  * 타입 간 관계 요약:
  *

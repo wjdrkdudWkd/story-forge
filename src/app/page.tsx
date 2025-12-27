@@ -14,6 +14,8 @@ import { generateActs } from "@/lib/actsClient";
 import { generateBlocksOverview, generateBlockDetail, regenerateOverview, expandOverview } from "@/lib/blocksClient";
 import { generateSeed } from "@/lib/random";
 import { DEFAULT_DETAIL_POLICY } from "@/config/policy";
+import { track } from "@/lib/track";
+import { AnalyticsDebugPanel } from "@/components/AnalyticsDebugPanel";
 
 type ViewState = "input" | "loading" | "output" | "confirmed" | "acts_loading" | "acts" | "blocks_loading" | "blocks";
 
@@ -39,6 +41,30 @@ export default function Home() {
       seed: form.seed ?? generateSeed(),
     };
 
+    // Track: 아이디어 생성 클릭
+    const selectedOptionsCount = [
+      form.world_setting,
+      form.world_era,
+      form.world_scale,
+      form.character_protagonist,
+      form.character_count,
+      form.character_relationship,
+      form.plot_structure,
+      form.plot_conflict,
+      form.plot_ending,
+      ...(form.motifs_ranked || []),
+    ].filter(Boolean).length;
+
+    track({
+      name: "idea_generate_clicked",
+      meta: {
+        tone: form.tone,
+        realism: form.realism,
+        selectedOptionsCount,
+        seed: formWithSeed.seed,
+      },
+    });
+
     const input: GenerateIdeaInput = {
       form: formWithSeed,
       compactedPayload: compactFormPayload(formWithSeed),
@@ -49,6 +75,15 @@ export default function Home() {
       const ideaResult = await generateIdea(input);
       setResult(ideaResult);
       setViewState("output");
+
+      // Track: 아이디어 생성 완료
+      track({
+        name: "idea_generated",
+        meta: {
+          candidates: ideaResult.candidates.length,
+          tagsCount: ideaResult.candidates[0]?.tags?.length || 0,
+        },
+      });
     } catch (error) {
       console.error("아이디어 생성 실패:", error);
       alert("아이디어 생성 중 오류가 발생했습니다.");
@@ -73,6 +108,14 @@ export default function Home() {
     console.log(JSON.stringify(result.state, null, 2));
     console.log("=".repeat(60));
 
+    // Track: 후보 선택
+    track({
+      name: "idea_candidate_selected",
+      meta: {
+        candidateIndex,
+      },
+    });
+
     setConfirmedIndex(candidateIndex);
     setViewState("confirmed");
   };
@@ -90,6 +133,11 @@ export default function Home() {
   const handleGenerateActs = async () => {
     if (!result || confirmedIndex === null) return;
 
+    // Track: 5막 구조 생성 클릭
+    track({
+      name: "acts_generate_clicked",
+    });
+
     setViewState("acts_loading");
 
     const selectedCandidate = result.candidates[confirmedIndex];
@@ -103,6 +151,14 @@ export default function Home() {
       const acts = await generateActs(input);
       setActsResult(acts);
       setViewState("acts");
+
+      // Track: 5막 구조 생성 완료
+      track({
+        name: "acts_generated",
+        meta: {
+          actCount: Object.keys(acts.acts).length,
+        },
+      });
     } catch (error) {
       console.error("5막 구조 생성 실패:", error);
       alert("5막 구조 생성 중 오류가 발생했습니다.");
@@ -133,6 +189,14 @@ export default function Home() {
       const draft = await generateBlocksOverview(input);
       setBlocksDraft(draft);
       setViewState("blocks");
+
+      // Track: 24블록 개요 생성 완료
+      track({
+        name: "blocks_overview_generated",
+        meta: {
+          count: draft.specs.length,
+        },
+      });
     } catch (error) {
       console.error("24블록 생성 실패:", error);
       alert("24블록 생성 중 오류가 발생했습니다.");
@@ -265,8 +329,41 @@ export default function Home() {
   // 상세 생성 (기본 sentenceRange)
   const handleGenerateDetail = async (index: BlockIndex) => {
     if (!blocksDraft || !result) return;
-    if (isCoolingDown(index)) return;
-    if (!canGenerateDetail()) return;
+
+    // 쿨다운 체크
+    if (isCoolingDown(index)) {
+      track({
+        name: "cooldown_blocked",
+        meta: {
+          index,
+          cooldownMs: policy.actionCooldownMs,
+        },
+      });
+      return;
+    }
+
+    // 할당량 체크
+    if (!canGenerateDetail()) {
+      track({
+        name: "quota_exceeded",
+        meta: {
+          kind: "detail_generation",
+          limit: policy.maxDetailGenerationsPerSession,
+          detailGenCount,
+        },
+      });
+      return;
+    }
+
+    // Track: 상세 생성 클릭
+    track({
+      name: "block_detail_generate_clicked",
+      meta: {
+        index,
+        sentenceRange: policy.detailSentenceRange,
+        detailGenCount,
+      },
+    });
 
     consumeDetailQuota();
     markAction(index);
@@ -325,6 +422,15 @@ export default function Home() {
       };
 
       setBlocksDraft(updatedDraft);
+
+      // Track: 상세 생성 완료
+      track({
+        name: "block_detail_generated",
+        meta: {
+          index,
+          variantCount: updatedDetailVariants.length,
+        },
+      });
     } catch (error) {
       console.error("상세 생성 실패:", error);
     }
@@ -337,8 +443,31 @@ export default function Home() {
     sentenceRange?: { min: number; max: number }
   ) => {
     if (!blocksDraft || !result) return;
-    if (isCoolingDown(index)) return;
-    if (!canGenerateDetail()) return;
+
+    // 쿨다운 체크
+    if (isCoolingDown(index)) {
+      track({
+        name: "cooldown_blocked",
+        meta: {
+          index,
+          cooldownMs: policy.actionCooldownMs,
+        },
+      });
+      return;
+    }
+
+    // 할당량 체크
+    if (!canGenerateDetail()) {
+      track({
+        name: "quota_exceeded",
+        meta: {
+          kind: "detail_generation",
+          limit: policy.maxDetailGenerationsPerSession,
+          detailGenCount,
+        },
+      });
+      return;
+    }
 
     consumeDetailQuota();
     markAction(index);
@@ -394,6 +523,16 @@ export default function Home() {
       };
 
       setBlocksDraft(updatedDraft);
+
+      // Track: 상세 확장 완료
+      track({
+        name: "block_detail_expanded",
+        meta: {
+          index,
+          preset,
+          sentenceRange: sentenceRange || policy.expandSentenceRange,
+        },
+      });
     } catch (error) {
       console.error("상세 확장 실패:", error);
     }
@@ -523,6 +662,9 @@ export default function Home() {
           onExpandDetail={handleExpandDetail}
         />
       )}
+
+      {/* Analytics Debug Panel */}
+      <AnalyticsDebugPanel policy={policy} detailGenCount={detailGenCount} />
     </main>
   );
 }
