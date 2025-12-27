@@ -24,8 +24,12 @@ import { logAI } from "./logAI";
 import {
   buildBlocksOverviewPrompt,
   buildBlockDetailPrompt,
+  buildBlocksRegenerateOverviewPrompt,
+  buildBlocksExpandOverviewPrompt,
   BLOCKS_OVERVIEW_PROMPT_VERSION,
   BLOCK_DETAIL_PROMPT_VERSION,
+  BLOCKS_REGEN_OVERVIEW_PROMPT_VERSION,
+  BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
 } from "./prompts";
 
 /**
@@ -202,8 +206,8 @@ export async function regenerateOverview(
     const result = mockRegenerateOverview(input);
     const latencyMs = Date.now() - startTime;
 
-    // 프롬프트 (재생성은 간단한 요청)
-    const prompt = `Regenerate overview for block ${input.index}`;
+    // 프롬프트 빌드
+    const prompt = buildBlocksRegenerateOverviewPrompt(input);
 
     // AI 로그 기록
     logAI({
@@ -212,15 +216,19 @@ export async function regenerateOverview(
       prompt,
       response: JSON.stringify({
         hookCount: result.hooks.length,
+        headline: result.headline,
       }),
       model: mode === "mock" ? "mock-block-overview-v1" : undefined,
       latencyMs,
       ok: true,
       meta: {
-        promptVersion: "block-overview-regenerate-v1",
+        promptVersion: BLOCKS_REGEN_OVERVIEW_PROMPT_VERSION,
         inputPayload: {
           blockIndex: input.index,
+          tone: input.state.tone,
+          seed: input.state.seed,
         },
+        usage: undefined,
       },
     }).catch((err) => {
       console.warn("[regenerateOverview] Failed to log AI call:", err);
@@ -230,7 +238,7 @@ export async function regenerateOverview(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
-    const prompt = `Regenerate overview for block ${input.index}`;
+    const prompt = buildBlocksRegenerateOverviewPrompt(input);
 
     logAI({
       stage: "block_overview_regenerate",
@@ -241,10 +249,11 @@ export async function regenerateOverview(
       ok: false,
       error: error instanceof Error ? error.message : String(error),
       meta: {
-        promptVersion: "block-overview-regenerate-v1",
+        promptVersion: BLOCKS_REGEN_OVERVIEW_PROMPT_VERSION,
         inputPayload: {
           blockIndex: input.index,
         },
+        usage: undefined,
       },
     }).catch((err) => {
       console.warn("[regenerateOverview] Failed to log AI error:", err);
@@ -274,8 +283,8 @@ export async function expandOverview(
     const result = mockExpandOverview(input);
     const latencyMs = Date.now() - startTime;
 
-    // 프롬프트 (확장 요청)
-    const prompt = `Expand overview for block ${input.index} with preset: ${input.preset || "default"}`;
+    // 프롬프트 빌드
+    const prompt = buildBlocksExpandOverviewPrompt(input);
 
     // AI 로그 기록
     logAI({
@@ -284,16 +293,20 @@ export async function expandOverview(
       prompt,
       response: JSON.stringify({
         hookCount: result.hooks.length,
+        headline: result.headline,
       }),
       model: mode === "mock" ? "mock-block-overview-v1" : undefined,
       latencyMs,
       ok: true,
       meta: {
-        promptVersion: "block-overview-expand-v1",
+        promptVersion: BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
         inputPayload: {
           blockIndex: input.index,
           preset: input.preset,
+          tone: input.state.tone,
+          seed: input.state.seed,
         },
+        usage: undefined,
       },
     }).catch((err) => {
       console.warn("[expandOverview] Failed to log AI call:", err);
@@ -303,7 +316,7 @@ export async function expandOverview(
   } catch (error) {
     const latencyMs = Date.now() - startTime;
 
-    const prompt = `Expand overview for block ${input.index} with preset: ${input.preset || "default"}`;
+    const prompt = buildBlocksExpandOverviewPrompt(input);
 
     logAI({
       stage: "block_overview_expand",
@@ -314,11 +327,12 @@ export async function expandOverview(
       ok: false,
       error: error instanceof Error ? error.message : String(error),
       meta: {
-        promptVersion: "block-overview-expand-v1",
+        promptVersion: BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
         inputPayload: {
           blockIndex: input.index,
           preset: input.preset,
         },
+        usage: undefined,
       },
     }).catch((err) => {
       console.warn("[expandOverview] Failed to log AI error:", err);

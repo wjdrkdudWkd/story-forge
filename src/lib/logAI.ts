@@ -7,6 +7,7 @@
  */
 
 import { getIdentity } from "./identity";
+import type { UsageMeta } from "@/types/ai";
 
 export interface LogAIInput {
   stage: string; // "idea" | "acts" | "blocks_overview" | "block_detail" | etc.
@@ -17,7 +18,11 @@ export interface LogAIInput {
   latencyMs?: number;
   ok?: boolean;
   error?: string;
-  meta?: Record<string, unknown>;
+  meta?: Record<string, unknown> & {
+    usage?: UsageMeta;
+    promptVersion?: string;
+    inputPayload?: Record<string, unknown>;
+  };
 }
 
 /**

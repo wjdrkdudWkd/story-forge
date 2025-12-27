@@ -23,3 +23,18 @@ export {
   buildBlockDetailPrompt,
   BLOCK_DETAIL_PROMPT_VERSION,
 } from "./blockDetailPrompt";
+
+export {
+  buildBlocksRegenerateOverviewPrompt,
+  BLOCKS_REGEN_OVERVIEW_PROMPT_VERSION,
+} from "./blocksRegenerateOverviewPrompt";
+
+export {
+  buildBlocksExpandOverviewPrompt,
+  BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
+} from "./blocksExpandOverviewPrompt";
+
+export {
+  buildBlockDetailExpandPrompt,
+  BLOCK_DETAIL_EXPAND_PROMPT_VERSION,
+} from "./blockDetailExpandPrompt";

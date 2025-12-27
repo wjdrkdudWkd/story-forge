@@ -25,7 +25,7 @@ const mockIdeaInput = {
     seed: 12345,
   },
   compactedPayload: {
-    tone: "light",
+    tone: "light" as const,
     world_setting: "fantasy",
   },
   mode: "mock" as const,

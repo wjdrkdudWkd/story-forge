@@ -4,13 +4,22 @@
  * AI 호출 로그 기록 API
  * - prompt, response, metadata 저장
  * - 서버 전용 (Service Role Key 사용)
+ * - prompt/response SHA-256 해시 계산
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { supabaseAdmin } from "@/server/supabaseAdmin";
 
 const MAX_PROMPT_CHARS = 100_000; // prompt 최대 길이
 const MAX_RESPONSE_CHARS = 100_000; // response 최대 길이
+
+/**
+ * SHA-256 해시 계산
+ */
+function computeHash(text: string): string {
+  return createHash("sha256").update(text, "utf-8").digest("hex");
+}
 
 /**
  * POST /api/ai-calls
@@ -54,6 +63,17 @@ export async function POST(request: NextRequest) {
     const promptChars = truncatedPrompt.length;
     const responseChars = truncatedResponse.length;
 
+    // 해시 계산 (truncated 된 문자열을 해시)
+    const promptHash = computeHash(truncatedPrompt);
+    const responseHash = computeHash(truncatedResponse);
+
+    // meta에 해시 추가
+    const meta = {
+      ...(body.meta || {}),
+      promptHash,
+      responseHash,
+    };
+
     // Supabase에 삽입
     const { error } = await supabaseAdmin.from("ai_calls").insert({
       ts: new Date().toISOString(),
@@ -71,7 +91,7 @@ export async function POST(request: NextRequest) {
       latency_ms: body.latencyMs || null,
       ok: body.ok !== undefined ? body.ok : true,
       error: body.error || null,
-      meta: body.meta || null,
+      meta,
     });
 
     if (error) {
