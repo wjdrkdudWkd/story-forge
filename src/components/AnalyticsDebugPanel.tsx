@@ -6,6 +6,7 @@
  * - detailGenCount, policy 값 표시
  * - 최근 추적된 이벤트 표시
  * - 서버 이벤트 가져오기 (개발 환경 전용)
+ * - 인증 정보 및 로그인/로그아웃
  */
 
 "use client";
@@ -15,6 +16,7 @@ import { getIdentity } from "@/lib/identity";
 import { getRecentEvents } from "@/lib/track";
 import type { EventRecord } from "@/types/events";
 import type { DetailPolicy } from "@/config/policy";
+import { AuthPanel } from "./AuthPanel";
 
 export interface AnalyticsDebugPanelProps {
   policy: DetailPolicy;
@@ -76,6 +78,11 @@ export function AnalyticsDebugPanel({
 
       {/* 내용 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        {/* Auth Panel */}
+        <div>
+          <AuthPanel />
+        </div>
+
         {/* Identity */}
         <div>
           <h4 className="font-semibold text-gray-700 mb-1">Identity</h4>

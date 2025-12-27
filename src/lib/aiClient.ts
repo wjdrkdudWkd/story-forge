@@ -8,6 +8,7 @@
 
 import type { GenerateIdeaInput, IdeaResult } from "@/types/idea";
 import { mockGenerateIdea } from "./mockAiClient";
+import { logAI } from "./logAI";
 
 /**
  * 아이디어 생성
@@ -19,19 +20,66 @@ export async function generateIdea(
   input: GenerateIdeaInput
 ): Promise<IdeaResult> {
   const mode = input.mode ?? "mock";
+  const startTime = Date.now();
 
-  switch (mode) {
-    case "mock":
-      // Mock 모드: 즉시 반환 (비동기 시뮬레이션)
-      await simulateDelay(500);
-      return mockGenerateIdea(input);
+  try {
+    let result: IdeaResult;
 
-    case "server":
-      // Server 모드: 향후 구현
-      throw new Error("Server mode not implemented yet");
+    switch (mode) {
+      case "mock":
+        // Mock 모드: 즉시 반환 (비동기 시뮬레이션)
+        await simulateDelay(500);
+        result = mockGenerateIdea(input);
+        break;
 
-    default:
-      throw new Error(`Unknown mode: ${mode}`);
+      case "server":
+        // Server 모드: 향후 구현
+        throw new Error("Server mode not implemented yet");
+
+      default:
+        throw new Error(`Unknown mode: ${mode}`);
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    // AI 로그 기록
+    logAI({
+      stage: "idea",
+      mode,
+      prompt: JSON.stringify({
+        tone: input.form.tone,
+        realism: input.form.realism,
+        compactedPayload: input.compactedPayload,
+      }),
+      response: JSON.stringify({
+        candidatesCount: result.candidates.length,
+        state: result.state,
+      }),
+      model: mode === "mock" ? "mock-idea-v1" : undefined,
+      latencyMs,
+      ok: true,
+    }).catch((err) => {
+      console.warn("[generateIdea] Failed to log AI call:", err);
+    });
+
+    return result;
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+
+    // 오류 로그 기록
+    logAI({
+      stage: "idea",
+      mode,
+      prompt: JSON.stringify(input.compactedPayload),
+      response: "",
+      latencyMs,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }).catch((err) => {
+      console.warn("[generateIdea] Failed to log AI error:", err);
+    });
+
+    throw error;
   }
 }
 
