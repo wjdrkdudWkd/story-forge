@@ -12,9 +12,10 @@ import { Button } from "./ui/button";
 export interface ActsPanelProps {
   actsResult: ActsResult;
   onBack: () => void;
+  onGenerateBlocks: () => void;
 }
 
-export function ActsPanel({ actsResult, onBack }: ActsPanelProps) {
+export function ActsPanel({ actsResult, onBack, onGenerateBlocks }: ActsPanelProps) {
   const { acts, state } = actsResult;
 
   return (
@@ -58,8 +59,8 @@ export function ActsPanel({ actsResult, onBack }: ActsPanelProps) {
         <Button variant="outline" onClick={onBack} className="flex-1">
           ← 뒤로
         </Button>
-        <Button className="flex-1" disabled>
-          24블록으로 진행 (준비 중)
+        <Button onClick={onGenerateBlocks} className="flex-1">
+          24블록으로 진행 →
         </Button>
       </div>
     </div>

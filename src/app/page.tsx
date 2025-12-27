@@ -4,20 +4,24 @@ import { useState } from "react";
 import { InputPanel } from "@/components/InputPanel";
 import { OutputPanel } from "@/components/OutputPanel";
 import { ActsPanel } from "@/components/ActsPanel";
+import { BlocksPanel } from "@/components/BlocksPanel";
 import type { IdeaFormState } from "@/types/form";
-import type { IdeaResult, GenerateIdeaInput } from "@/types/idea";
+import type { IdeaResult, GenerateIdeaInput, IdeaCandidate } from "@/types/idea";
 import type { ActsResult, GenerateActsInput } from "@/types/acts";
+import type { BlocksDraft, GenerateBlocksOverviewInput } from "@/types/blocks";
 import { generateIdea, compactFormPayload } from "@/lib/aiClient";
 import { generateActs } from "@/lib/actsClient";
+import { generateBlocksOverview } from "@/lib/blocksClient";
 import { generateSeed } from "@/lib/random";
 
-type ViewState = "input" | "loading" | "output" | "confirmed" | "acts_loading" | "acts";
+type ViewState = "input" | "loading" | "output" | "confirmed" | "acts_loading" | "acts" | "blocks_loading" | "blocks";
 
 export default function Home() {
   const [viewState, setViewState] = useState<ViewState>("input");
   const [result, setResult] = useState<IdeaResult | null>(null);
   const [confirmedIndex, setConfirmedIndex] = useState<number | null>(null);
   const [actsResult, setActsResult] = useState<ActsResult | null>(null);
+  const [blocksDraft, setBlocksDraft] = useState<BlocksDraft | null>(null);
 
   // 아이디어 생성 핸들러
   const handleGenerate = async (form: IdeaFormState) => {
@@ -73,6 +77,7 @@ export default function Home() {
     setResult(null);
     setConfirmedIndex(null);
     setActsResult(null);
+    setBlocksDraft(null);
   };
 
   // 5막 구조 생성 핸들러
@@ -103,6 +108,41 @@ export default function Home() {
   const handleBackFromActs = () => {
     setViewState("confirmed");
     setActsResult(null);
+  };
+
+  // 24블록 생성 핸들러
+  const handleGenerateBlocks = async () => {
+    if (!result || confirmedIndex === null) return;
+
+    setViewState("blocks_loading");
+
+    const selectedCandidate = result.candidates[confirmedIndex];
+    const input: GenerateBlocksOverviewInput = {
+      candidate: selectedCandidate,
+      state: result.state,
+      acts: actsResult || undefined,
+    };
+
+    try {
+      const draft = await generateBlocksOverview(input);
+      setBlocksDraft(draft);
+      setViewState("blocks");
+    } catch (error) {
+      console.error("24블록 생성 실패:", error);
+      alert("24블록 생성 중 오류가 발생했습니다.");
+      setViewState("acts");
+    }
+  };
+
+  // 24블록 화면에서 뒤로 가기 핸들러
+  const handleBackFromBlocks = () => {
+    setViewState("acts");
+    setBlocksDraft(null);
+  };
+
+  // 24블록 draft 업데이트 핸들러
+  const handleUpdateDraft = (nextDraft: BlocksDraft) => {
+    setBlocksDraft(nextDraft);
   };
 
   return (
@@ -199,6 +239,26 @@ export default function Home() {
         <ActsPanel
           actsResult={actsResult}
           onBack={handleBackFromActs}
+          onGenerateBlocks={handleGenerateBlocks}
+        />
+      )}
+
+      {/* Blocks Loading 화면 */}
+      {viewState === "blocks_loading" && (
+        <div className="w-full max-w-2xl mx-auto p-6 text-center">
+          <h1 className="text-2xl font-bold">24블록 생성 중...</h1>
+          <p className="mt-4 text-foreground/60">
+            24개의 블록 개요를 생성하고 있습니다. 잠시만 기다려주세요.
+          </p>
+        </div>
+      )}
+
+      {/* Blocks 화면 */}
+      {viewState === "blocks" && blocksDraft && (
+        <BlocksPanel
+          draft={blocksDraft}
+          onBack={handleBackFromBlocks}
+          onUpdateDraft={handleUpdateDraft}
         />
       )}
     </main>
