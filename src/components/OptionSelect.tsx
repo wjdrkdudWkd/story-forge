@@ -24,12 +24,12 @@ export interface OptionSelectProps {
 export function OptionSelect({ group, value, onChange }: OptionSelectProps) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-gray-800">{group.label}</label>
+      <label className="text-sm font-medium text-gray-700">{group.label}</label>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder={`${group.label} 선택`} />
+        <SelectTrigger className="bg-white">
+          <SelectValue placeholder={`Select ${group.label.toLowerCase()}...`} />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="z-[9999]">
           {group.options.map((option) => (
             <SelectItem key={option.key} value={option.key}>
               {option.label}

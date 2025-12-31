@@ -16,6 +16,7 @@ export interface SelectTriggerProps
 
 export interface SelectContentProps {
   children: React.ReactNode;
+  className?: string;
 }
 
 export interface SelectItemProps {
@@ -86,7 +87,7 @@ export function SelectValue({ placeholder }: { placeholder?: string }) {
   return <span className="text-gray-800">{value || placeholder}</span>;
 }
 
-export function SelectContent({ children }: SelectContentProps) {
+export function SelectContent({ children, className }: SelectContentProps) {
   const { open, setOpen } = React.useContext(SelectContext);
 
   if (!open) return null;
@@ -97,7 +98,7 @@ export function SelectContent({ children }: SelectContentProps) {
         className="fixed inset-0 z-40"
         onClick={() => setOpen(false)}
       />
-      <div className="absolute z-50 mt-1 w-full rounded border border-gray-300 bg-white shadow-md">
+      <div className={cn("absolute z-50 mt-1 w-full rounded border border-gray-300 bg-white shadow-md", className)}>
         <div className="max-h-60 overflow-auto p-1">{children}</div>
       </div>
     </>

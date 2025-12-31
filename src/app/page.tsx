@@ -1,26 +1,48 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { InputPanel } from "@/components/InputPanel";
-import { OutputPanel } from "@/components/OutputPanel";
-import { ActsPanel } from "@/components/ActsPanel";
-import { BlocksPanel } from "@/components/BlocksPanel";
-import type { IdeaFormState } from "@/types/form";
-import type { IdeaResult, GenerateIdeaInput, IdeaCandidate } from "@/types/idea";
-import type { ActsResult, GenerateActsInput } from "@/types/acts";
-import type { BlocksDraft, GenerateBlocksOverviewInput, BlockIndex, ExpandPreset } from "@/types/blocks";
-import { generateIdea, compactFormPayload } from "@/lib/aiClient";
-import { generateActs } from "@/lib/actsClient";
-import { generateBlocksOverview, generateBlockDetail, regenerateOverview, expandOverview } from "@/lib/blocksClient";
-import { generateSeed } from "@/lib/random";
-import { DEFAULT_DETAIL_POLICY } from "@/config/policy";
-import { track } from "@/lib/track";
-import { AnalyticsDebugPanel } from "@/components/AnalyticsDebugPanel";
+import { useState } from 'react';
+import { InputPanel } from '@/components/InputPanel';
+import { OutputPanel } from '@/components/OutputPanel';
+import { ActsPanel } from '@/components/ActsPanel';
+import { BlocksPanel } from '@/components/BlocksPanel';
+import type { IdeaFormState } from '@/types/form';
+import type {
+  IdeaResult,
+  GenerateIdeaInput,
+  IdeaCandidate,
+} from '@/types/idea';
+import type { ActsResult, GenerateActsInput } from '@/types/acts';
+import type {
+  BlocksDraft,
+  GenerateBlocksOverviewInput,
+  BlockIndex,
+  ExpandPreset,
+} from '@/types/blocks';
+import { generateIdea, compactFormPayload } from '@/lib/aiClient';
+import { generateActs } from '@/lib/actsClient';
+import {
+  generateBlocksOverview,
+  generateBlockDetail,
+  regenerateOverview,
+  expandOverview,
+} from '@/lib/blocksClient';
+import { generateSeed } from '@/lib/random';
+import { DEFAULT_DETAIL_POLICY } from '@/config/policy';
+import { track } from '@/lib/track';
+import { AnalyticsDebugPanel } from '@/components/AnalyticsDebugPanel';
 
-type ViewState = "input" | "loading" | "output" | "confirmed" | "acts_loading" | "acts" | "blocks_loading" | "blocks";
+type ViewState =
+  | 'input'
+  | 'loading'
+  | 'output'
+  | 'confirmed'
+  | 'acts_loading'
+  | 'acts'
+  | 'blocks_loading'
+  | 'blocks';
 
 export default function Home() {
-  const [viewState, setViewState] = useState<ViewState>("input");
+  const [viewState, setViewState] = useState<ViewState>('input');
   const [result, setResult] = useState<IdeaResult | null>(null);
   const [confirmedIndex, setConfirmedIndex] = useState<number | null>(null);
   const [actsResult, setActsResult] = useState<ActsResult | null>(null);
@@ -29,11 +51,13 @@ export default function Home() {
   // 정책 및 세션 카운터
   const policy = DEFAULT_DETAIL_POLICY;
   const [detailGenCount, setDetailGenCount] = useState(0);
-  const [lastActionAtByIndex, setLastActionAtByIndex] = useState<Record<number, number>>({});
+  const [lastActionAtByIndex, setLastActionAtByIndex] = useState<
+    Record<number, number>
+  >({});
 
   // 아이디어 생성 핸들러
   const handleGenerate = async (form: IdeaFormState) => {
-    setViewState("loading");
+    setViewState('loading');
 
     // Seed 자동 생성 (없으면)
     const formWithSeed: IdeaFormState = {
@@ -56,7 +80,7 @@ export default function Home() {
     ].filter(Boolean).length;
 
     track({
-      name: "idea_generate_clicked",
+      name: 'idea_generate_clicked',
       meta: {
         tone: form.tone,
         realism: form.realism,
@@ -68,26 +92,26 @@ export default function Home() {
     const input: GenerateIdeaInput = {
       form: formWithSeed,
       compactedPayload: compactFormPayload(formWithSeed),
-      mode: "mock",
+      mode: 'mock',
     };
 
     try {
       const ideaResult = await generateIdea(input);
       setResult(ideaResult);
-      setViewState("output");
+      setViewState('output');
 
       // Track: 아이디어 생성 완료
       track({
-        name: "idea_generated",
+        name: 'idea_generated',
         meta: {
           candidates: ideaResult.candidates.length,
           tagsCount: ideaResult.candidates[0]?.tags?.length || 0,
         },
       });
     } catch (error) {
-      console.error("아이디어 생성 실패:", error);
-      alert("아이디어 생성 중 오류가 발생했습니다.");
-      setViewState("input");
+      console.error('아이디어 생성 실패:', error);
+      alert('아이디어 생성 중 오류가 발생했습니다.');
+      setViewState('input');
     }
   };
 
@@ -96,33 +120,33 @@ export default function Home() {
     if (!result) return;
 
     const selectedCandidate = result.candidates[candidateIndex];
-    console.log("=".repeat(60));
-    console.log("아이디어 확정");
-    console.log("=".repeat(60));
-    console.log("선택된 후보:", candidateIndex + 1);
-    console.log("Logline:", selectedCandidate.logline);
-    console.log("Synopsis:", selectedCandidate.synopsis);
-    console.log("Tags:", selectedCandidate.tags);
+    console.log('='.repeat(60));
+    console.log('아이디어 확정');
+    console.log('='.repeat(60));
+    console.log('선택된 후보:', candidateIndex + 1);
+    console.log('Logline:', selectedCandidate.logline);
+    console.log('Synopsis:', selectedCandidate.synopsis);
+    console.log('Tags:', selectedCandidate.tags);
     console.log();
-    console.log("IdeaState:");
+    console.log('IdeaState:');
     console.log(JSON.stringify(result.state, null, 2));
-    console.log("=".repeat(60));
+    console.log('='.repeat(60));
 
     // Track: 후보 선택
     track({
-      name: "idea_candidate_selected",
+      name: 'idea_candidate_selected',
       meta: {
         candidateIndex,
       },
     });
 
     setConfirmedIndex(candidateIndex);
-    setViewState("confirmed");
+    setViewState('confirmed');
   };
 
   // 다시 생성 핸들러
   const handleBack = () => {
-    setViewState("input");
+    setViewState('input');
     setResult(null);
     setConfirmedIndex(null);
     setActsResult(null);
@@ -135,10 +159,10 @@ export default function Home() {
 
     // Track: 5막 구조 생성 클릭
     track({
-      name: "acts_generate_clicked",
+      name: 'acts_generate_clicked',
     });
 
-    setViewState("acts_loading");
+    setViewState('acts_loading');
 
     const selectedCandidate = result.candidates[confirmedIndex];
     const input: GenerateActsInput = {
@@ -150,25 +174,25 @@ export default function Home() {
     try {
       const acts = await generateActs(input);
       setActsResult(acts);
-      setViewState("acts");
+      setViewState('acts');
 
       // Track: 5막 구조 생성 완료
       track({
-        name: "acts_generated",
+        name: 'acts_generated',
         meta: {
           actCount: Object.keys(acts.acts).length,
         },
       });
     } catch (error) {
-      console.error("5막 구조 생성 실패:", error);
-      alert("5막 구조 생성 중 오류가 발생했습니다.");
-      setViewState("confirmed");
+      console.error('5막 구조 생성 실패:', error);
+      alert('5막 구조 생성 중 오류가 발생했습니다.');
+      setViewState('confirmed');
     }
   };
 
   // 5막 화면에서 뒤로 가기 핸들러
   const handleBackFromActs = () => {
-    setViewState("confirmed");
+    setViewState('confirmed');
     setActsResult(null);
   };
 
@@ -176,7 +200,7 @@ export default function Home() {
   const handleGenerateBlocks = async () => {
     if (!result || confirmedIndex === null) return;
 
-    setViewState("blocks_loading");
+    setViewState('blocks_loading');
 
     const selectedCandidate = result.candidates[confirmedIndex];
     const input: GenerateBlocksOverviewInput = {
@@ -188,25 +212,25 @@ export default function Home() {
     try {
       const draft = await generateBlocksOverview(input);
       setBlocksDraft(draft);
-      setViewState("blocks");
+      setViewState('blocks');
 
       // Track: 24블록 개요 생성 완료
       track({
-        name: "blocks_overview_generated",
+        name: 'blocks_overview_generated',
         meta: {
           count: draft.specs.length,
         },
       });
     } catch (error) {
-      console.error("24블록 생성 실패:", error);
-      alert("24블록 생성 중 오류가 발생했습니다.");
-      setViewState("acts");
+      console.error('24블록 생성 실패:', error);
+      alert('24블록 생성 중 오류가 발생했습니다.');
+      setViewState('acts');
     }
   };
 
   // 24블록 화면에서 뒤로 가기 핸들러
   const handleBackFromBlocks = () => {
-    setViewState("acts");
+    setViewState('acts');
     setBlocksDraft(null);
   };
 
@@ -278,12 +302,15 @@ export default function Home() {
 
       setBlocksDraft(updatedDraft);
     } catch (error) {
-      console.error("개요 재생성 실패:", error);
+      console.error('개요 재생성 실패:', error);
     }
   };
 
   // 개요 발전시키기
-  const handleExpandOverview = async (index: BlockIndex, preset: ExpandPreset) => {
+  const handleExpandOverview = async (
+    index: BlockIndex,
+    preset: ExpandPreset
+  ) => {
     if (!blocksDraft || !result) return;
     if (isCoolingDown(index)) return;
 
@@ -322,7 +349,7 @@ export default function Home() {
 
       setBlocksDraft(updatedDraft);
     } catch (error) {
-      console.error("개요 발전 실패:", error);
+      console.error('개요 발전 실패:', error);
     }
   };
 
@@ -333,7 +360,7 @@ export default function Home() {
     // 쿨다운 체크
     if (isCoolingDown(index)) {
       track({
-        name: "cooldown_blocked",
+        name: 'cooldown_blocked',
         meta: {
           index,
           cooldownMs: policy.actionCooldownMs,
@@ -345,9 +372,9 @@ export default function Home() {
     // 할당량 체크
     if (!canGenerateDetail()) {
       track({
-        name: "quota_exceeded",
+        name: 'quota_exceeded',
         meta: {
-          kind: "detail_generation",
+          kind: 'detail_generation',
           limit: policy.maxDetailGenerationsPerSession,
           detailGenCount,
         },
@@ -357,7 +384,7 @@ export default function Home() {
 
     // Track: 상세 생성 클릭
     track({
-      name: "block_detail_generate_clicked",
+      name: 'block_detail_generate_clicked',
       meta: {
         index,
         sentenceRange: policy.detailSentenceRange,
@@ -392,12 +419,16 @@ export default function Home() {
       if (updatedDetailVariants.length > policy.maxDetailVariantsPerBlock) {
         // 선택된 variant 찾기
         const selectedId = block.selectedDetailId;
-        const selectedIndex = updatedDetailVariants.findIndex((v) => v.id === selectedId);
+        const selectedIndex = updatedDetailVariants.findIndex(
+          (v) => v.id === selectedId
+        );
 
         // 가장 오래된 non-selected variant 제거
         if (selectedIndex !== -1) {
           // 선택된 것은 보호
-          const nonSelected = updatedDetailVariants.filter((v) => v.id !== selectedId);
+          const nonSelected = updatedDetailVariants.filter(
+            (v) => v.id !== selectedId
+          );
           nonSelected.shift(); // 가장 오래된 것 제거
           updatedDetailVariants = [
             updatedDetailVariants[selectedIndex],
@@ -425,14 +456,14 @@ export default function Home() {
 
       // Track: 상세 생성 완료
       track({
-        name: "block_detail_generated",
+        name: 'block_detail_generated',
         meta: {
           index,
           variantCount: updatedDetailVariants.length,
         },
       });
     } catch (error) {
-      console.error("상세 생성 실패:", error);
+      console.error('상세 생성 실패:', error);
     }
   };
 
@@ -447,7 +478,7 @@ export default function Home() {
     // 쿨다운 체크
     if (isCoolingDown(index)) {
       track({
-        name: "cooldown_blocked",
+        name: 'cooldown_blocked',
         meta: {
           index,
           cooldownMs: policy.actionCooldownMs,
@@ -459,9 +490,9 @@ export default function Home() {
     // 할당량 체크
     if (!canGenerateDetail()) {
       track({
-        name: "quota_exceeded",
+        name: 'quota_exceeded',
         meta: {
-          kind: "detail_generation",
+          kind: 'detail_generation',
           limit: policy.maxDetailGenerationsPerSession,
           detailGenCount,
         },
@@ -496,10 +527,14 @@ export default function Home() {
       let updatedDetailVariants = [...block.detailVariants, newDetail];
       if (updatedDetailVariants.length > policy.maxDetailVariantsPerBlock) {
         const selectedId = block.selectedDetailId;
-        const selectedIndex = updatedDetailVariants.findIndex((v) => v.id === selectedId);
+        const selectedIndex = updatedDetailVariants.findIndex(
+          (v) => v.id === selectedId
+        );
 
         if (selectedIndex !== -1) {
-          const nonSelected = updatedDetailVariants.filter((v) => v.id !== selectedId);
+          const nonSelected = updatedDetailVariants.filter(
+            (v) => v.id !== selectedId
+          );
           nonSelected.shift();
           updatedDetailVariants = [
             updatedDetailVariants[selectedIndex],
@@ -526,7 +561,7 @@ export default function Home() {
 
       // Track: 상세 확장 완료
       track({
-        name: "block_detail_expanded",
+        name: 'block_detail_expanded',
         meta: {
           index,
           preset,
@@ -534,29 +569,25 @@ export default function Home() {
         },
       });
     } catch (error) {
-      console.error("상세 확장 실패:", error);
+      console.error('상세 확장 실패:', error);
     }
   };
 
   return (
     <main className="min-h-screen p-8">
       {/* Input 화면 */}
-      {viewState === "input" && (
-        <InputPanel onGenerate={handleGenerate} />
-      )}
+      {viewState === 'input' && <InputPanel onGenerate={handleGenerate} />}
 
       {/* Loading 화면 */}
-      {viewState === "loading" && (
+      {viewState === 'loading' && (
         <div className="w-full max-w-2xl mx-auto p-6 text-center">
           <h1 className="text-2xl font-bold">아이디어 생성 중...</h1>
-          <p className="mt-4 text-foreground/60">
-            잠시만 기다려주세요
-          </p>
+          <p className="mt-4 text-foreground/60">잠시만 기다려주세요</p>
         </div>
       )}
 
       {/* Output 화면 */}
-      {viewState === "output" && result && (
+      {viewState === 'output' && result && (
         <OutputPanel
           result={result}
           onConfirm={handleConfirm}
@@ -565,7 +596,7 @@ export default function Home() {
       )}
 
       {/* Confirmed 화면 */}
-      {viewState === "confirmed" && result && confirmedIndex !== null && (
+      {viewState === 'confirmed' && result && confirmedIndex !== null && (
         <div className="w-full max-w-2xl mx-auto p-6 space-y-6">
           <div className="text-center space-y-4">
             <h1 className="text-2xl font-bold">아이디어 확정 완료</h1>
@@ -618,17 +649,15 @@ export default function Home() {
       )}
 
       {/* Acts Loading 화면 */}
-      {viewState === "acts_loading" && (
+      {viewState === 'acts_loading' && (
         <div className="w-full max-w-2xl mx-auto p-6 text-center">
           <h1 className="text-2xl font-bold">5막 구조 생성 중...</h1>
-          <p className="mt-4 text-foreground/60">
-            잠시만 기다려주세요
-          </p>
+          <p className="mt-4 text-foreground/60">잠시만 기다려주세요</p>
         </div>
       )}
 
       {/* Acts 화면 */}
-      {viewState === "acts" && actsResult && (
+      {viewState === 'acts' && actsResult && (
         <ActsPanel
           actsResult={actsResult}
           onBack={handleBackFromActs}
@@ -637,7 +666,7 @@ export default function Home() {
       )}
 
       {/* Blocks Loading 화면 */}
-      {viewState === "blocks_loading" && (
+      {viewState === 'blocks_loading' && (
         <div className="w-full max-w-2xl mx-auto p-6 text-center">
           <h1 className="text-2xl font-bold">24블록 생성 중...</h1>
           <p className="mt-4 text-foreground/60">
@@ -647,7 +676,7 @@ export default function Home() {
       )}
 
       {/* Blocks 화면 */}
-      {viewState === "blocks" && blocksDraft && (
+      {viewState === 'blocks' && blocksDraft && (
         <BlocksPanel
           draft={blocksDraft}
           onBack={handleBackFromBlocks}
