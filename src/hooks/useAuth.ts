@@ -1,170 +1,39 @@
 /**
  * useAuth.ts
  *
- * Supabase Auth Hook
- * - 사용자 인증 상태 관리
- * - 이메일 매직 링크 로그인
- * - 로그아웃
- * - 익명 이벤트 연결
+ * [리팩토링] Supabase Auth 제거됨
+ *
+ * 인증은 FastAPI 백엔드로 이전 예정입니다.
+ * 백엔드 인증 API가 구현될 때까지 항상 비로그인 상태를 반환하는
+ * stub 구현체입니다. 인터페이스는 기존과 동일하게 유지합니다.
  */
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabaseClient";
-import { getIdentity } from "@/lib/identity";
-import type { User } from "@supabase/supabase-js";
-
 export interface UseAuthReturn {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
+  user: null;
+  loading: false;
+  error: null;
   signInWithEmail: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
-  isConfigured: boolean;
+  isConfigured: false;
 }
 
-/**
- * useAuth Hook
- * - 사용자 인증 상태 추적
- * - 로그인 후 자동으로 익명 이벤트 연결
- */
 export function useAuth(): UseAuthReturn {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      setLoading(false);
-      return;
-    }
-
-    // 초기 세션 확인
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-
-      // 로그인 후 익명 이벤트 연결
-      if (session?.user) {
-        linkAnonEvents(session.user.id).catch((err) => {
-          console.warn("[useAuth] Failed to link anon events:", err);
-        });
-      }
-    });
-
-    // Auth 상태 변화 감지
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-
-      // 로그인 후 익명 이벤트 연결
-      if (session?.user) {
-        linkAnonEvents(session.user.id).catch((err) => {
-          console.warn("[useAuth] Failed to link anon events:", err);
-        });
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  /**
-   * 이메일 매직 링크 로그인
-   */
-  const signInWithEmail = async (email: string) => {
-    if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase가 설정되지 않았습니다.");
-      throw new Error("Supabase not configured");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      // 성공 메시지는 UI에서 처리
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "로그인 중 오류가 발생했습니다.";
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+  const signInWithEmail = async (_email: string): Promise<void> => {
+    console.warn("[useAuth] Auth not implemented. Backend auth API pending.");
   };
 
-  /**
-   * 로그아웃
-   */
-  const signOut = async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase가 설정되지 않았습니다.");
-      throw new Error("Supabase not configured");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        throw error;
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "로그아웃 중 오류가 발생했습니다.";
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+  const signOut = async (): Promise<void> => {
+    console.warn("[useAuth] Auth not implemented. Backend auth API pending.");
   };
 
   return {
-    user,
-    loading,
-    error,
+    user: null,
+    loading: false,
+    error: null,
     signInWithEmail,
     signOut,
-    isConfigured: isSupabaseConfigured,
+    isConfigured: false,
   };
-}
-
-/**
- * 익명 이벤트를 사용자 계정에 연결
- */
-async function linkAnonEvents(userId: string): Promise<void> {
-  const { anonId } = getIdentity();
-
-  try {
-    const response = await fetch("/api/events/link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ anonId, userId }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to link events: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("[linkAnonEvents] Successfully linked:", data);
-  } catch (error) {
-    console.error("[linkAnonEvents] Error:", error);
-    throw error;
-  }
 }

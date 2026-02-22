@@ -37,16 +37,15 @@ export function AnalyticsDebugPanel({
   const handleFetchServerEvents = async () => {
     setIsLoadingServerEvents(true);
     try {
-      const response = await fetch("/api/events");
+      // [리팩토링] /api/events(Next.js Route) 제거됨
+      // 백엔드 이벤트 조회는 FastAPI GET /api/v1/logs/events 로 이전 예정
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+      const response = await fetch(`${backendUrl}/api/v1/logs/events`);
       const data = await response.json();
-      if (data.ok) {
-        setServerEvents(data.events || []);
-      } else {
-        alert("서버 이벤트 가져오기 실패");
-      }
+      setServerEvents(data.events || data || []);
     } catch (error) {
       console.error("Failed to fetch server events:", error);
-      alert("서버 이벤트 가져오기 중 오류 발생");
+      alert("서버 이벤트 가져오기 중 오류 발생 (백엔드가 실행 중인지 확인하세요)");
     } finally {
       setIsLoadingServerEvents(false);
     }
