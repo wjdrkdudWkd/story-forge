@@ -2,7 +2,14 @@
  * blocksClient.ts
  *
  * 24블록 생성 클라이언트
- * 현재는 Mock만 지원, 나중에 실제 AI 서버로 확장 가능
+ *
+ * [리팩토링]
+ * - mock 모드: 기존 mock 함수들 유지 (백엔드 개발 전 테스트용)
+ * - server 모드: FastAPI 백엔드 호출
+ *   - generateBlocksOverview  → POST /api/v1/story/blocks/overview
+ *   - generateBlockDetail     → POST /api/v1/story/blocks/detail
+ *   - regenerateOverview      → POST /api/v1/story/blocks/regenerate-overview
+ *   - expandOverview          → POST /api/v1/story/blocks/expand-overview
  */
 
 import type {
@@ -20,6 +27,12 @@ import {
   mockRegenerateOverview,
   mockExpandOverview,
 } from "./mockBlocksClient";
+import {
+  generateBlocksOverviewFromServer,
+  generateBlockDetailFromServer,
+  regenerateOverviewFromServer,
+  expandOverviewFromServer,
+} from "./api/storyApi";
 import { logAI } from "./logAI";
 import {
   buildBlocksOverviewPrompt,
@@ -32,9 +45,10 @@ import {
   BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
 } from "./prompts";
 
-/**
- * 24블록 개요 생성
- */
+// ─────────────────────────────────────────────────────────────────
+// 24블록 개요 생성
+// ─────────────────────────────────────────────────────────────────
+
 export async function generateBlocksOverview(
   input: GenerateBlocksOverviewInput
 ): Promise<BlocksDraft> {
@@ -42,20 +56,24 @@ export async function generateBlocksOverview(
   const startTime = Date.now();
 
   try {
+    let result: BlocksDraft;
+
     if (mode === "server") {
-      throw new Error("Server mode not implemented yet");
+      result = await generateBlocksOverviewFromServer(
+        input.candidate.logline,
+        input.candidate.synopsis,
+        input.candidate.tags,
+        input.state,
+        input.acts
+      );
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      result = mockGenerateBlocksOverview(input);
     }
 
-    // Mock 모드 (기본값)
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-
-    const result = mockGenerateBlocksOverview(input);
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드
     const prompt = buildBlocksOverviewPrompt(input);
 
-    // AI 로그 기록
     logAI({
       stage: "blocks_overview",
       mode,
@@ -83,8 +101,6 @@ export async function generateBlocksOverview(
     return result;
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드 (오류 로깅용)
     const prompt = buildBlocksOverviewPrompt(input);
 
     logAI({
@@ -97,9 +113,7 @@ export async function generateBlocksOverview(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: BLOCKS_OVERVIEW_PROMPT_VERSION,
-        inputPayload: {
-          logline: input.candidate.logline,
-        },
+        inputPayload: { logline: input.candidate.logline },
       },
     }).catch((err) => {
       console.warn("[generateBlocksOverview] Failed to log AI error:", err);
@@ -109,9 +123,10 @@ export async function generateBlocksOverview(
   }
 }
 
-/**
- * 블록 상세 생성
- */
+// ─────────────────────────────────────────────────────────────────
+// 블록 상세 생성 (기본 / 확장 공통)
+// ─────────────────────────────────────────────────────────────────
+
 export async function generateBlockDetail(
   input: GenerateBlockDetailInput
 ): Promise<BlockDetailVariant> {
@@ -119,20 +134,26 @@ export async function generateBlockDetail(
   const startTime = Date.now();
 
   try {
+    let result: BlockDetailVariant;
+
     if (mode === "server") {
-      throw new Error("Server mode not implemented yet");
+      result = await generateBlockDetailFromServer(
+        input.index,
+        input.spec,
+        input.overview,
+        input.state,
+        input.memory,
+        input.preset,
+        input.sentenceRange
+      );
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      result = mockGenerateBlockDetail(input);
     }
 
-    // Mock 모드
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    const result = mockGenerateBlockDetail(input);
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드
     const prompt = buildBlockDetailPrompt(input);
 
-    // AI 로그 기록
     logAI({
       stage: "block_detail",
       mode,
@@ -160,8 +181,6 @@ export async function generateBlockDetail(
     return result;
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드 (오류 로깅용)
     const prompt = buildBlockDetailPrompt(input);
 
     logAI({
@@ -174,9 +193,7 @@ export async function generateBlockDetail(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: BLOCK_DETAIL_PROMPT_VERSION,
-        inputPayload: {
-          blockIndex: input.index,
-        },
+        inputPayload: { blockIndex: input.index },
       },
     }).catch((err) => {
       console.warn("[generateBlockDetail] Failed to log AI error:", err);
@@ -186,9 +203,10 @@ export async function generateBlockDetail(
   }
 }
 
-/**
- * 개요 재생성
- */
+// ─────────────────────────────────────────────────────────────────
+// 블록 개요 재생성
+// ─────────────────────────────────────────────────────────────────
+
 export async function regenerateOverview(
   input: RegenerateOverviewInput
 ): Promise<BlockOverviewVariant> {
@@ -196,20 +214,24 @@ export async function regenerateOverview(
   const startTime = Date.now();
 
   try {
+    let result: BlockOverviewVariant;
+
     if (mode === "server") {
-      throw new Error("Server mode not implemented yet");
+      result = await regenerateOverviewFromServer(
+        input.index,
+        input.spec,
+        input.currentOverview,
+        input.state,
+        input.memory
+      );
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      result = mockRegenerateOverview(input);
     }
 
-    // Mock 모드
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const result = mockRegenerateOverview(input);
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드
     const prompt = buildBlocksRegenerateOverviewPrompt(input);
 
-    // AI 로그 기록
     logAI({
       stage: "block_overview_regenerate",
       mode,
@@ -237,7 +259,6 @@ export async function regenerateOverview(
     return result;
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
     const prompt = buildBlocksRegenerateOverviewPrompt(input);
 
     logAI({
@@ -250,9 +271,7 @@ export async function regenerateOverview(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: BLOCKS_REGEN_OVERVIEW_PROMPT_VERSION,
-        inputPayload: {
-          blockIndex: input.index,
-        },
+        inputPayload: { blockIndex: input.index },
         usage: undefined,
       },
     }).catch((err) => {
@@ -263,9 +282,10 @@ export async function regenerateOverview(
   }
 }
 
-/**
- * 개요 발전시키기
- */
+// ─────────────────────────────────────────────────────────────────
+// 블록 개요 확장 (프리셋 적용)
+// ─────────────────────────────────────────────────────────────────
+
 export async function expandOverview(
   input: ExpandOverviewInput
 ): Promise<BlockOverviewVariant> {
@@ -273,20 +293,25 @@ export async function expandOverview(
   const startTime = Date.now();
 
   try {
+    let result: BlockOverviewVariant;
+
     if (mode === "server") {
-      throw new Error("Server mode not implemented yet");
+      result = await expandOverviewFromServer(
+        input.index,
+        input.spec,
+        input.currentOverview,
+        input.preset,
+        input.state,
+        input.memory
+      );
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      result = mockExpandOverview(input);
     }
 
-    // Mock 모드
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const result = mockExpandOverview(input);
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드
     const prompt = buildBlocksExpandOverviewPrompt(input);
 
-    // AI 로그 기록
     logAI({
       stage: "block_overview_expand",
       mode,
@@ -315,7 +340,6 @@ export async function expandOverview(
     return result;
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
     const prompt = buildBlocksExpandOverviewPrompt(input);
 
     logAI({
@@ -328,10 +352,7 @@ export async function expandOverview(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: BLOCKS_EXPAND_OVERVIEW_PROMPT_VERSION,
-        inputPayload: {
-          blockIndex: input.index,
-          preset: input.preset,
-        },
+        inputPayload: { blockIndex: input.index, preset: input.preset },
         usage: undefined,
       },
     }).catch((err) => {

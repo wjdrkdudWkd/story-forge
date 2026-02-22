@@ -1,21 +1,23 @@
 /**
  * aiClient.ts
  *
- * AI 클라이언트 인터페이스
- * - 현재: Mock 모드만 지원
- * - 향후: Server/API 모드 추가 가능
+ * 아이디어 생성 클라이언트
+ *
+ * [리팩토링]
+ * - mock 모드: 기존 mockGenerateIdea() 유지 (백엔드 개발 전 테스트용)
+ * - server 모드: FastAPI POST /api/v1/story/idea 호출
+ *
+ * page.tsx에서 mode: 'server'로 변경하면 즉시 백엔드 연동 가능.
  */
 
 import type { GenerateIdeaInput, IdeaResult } from "@/types/idea";
 import { mockGenerateIdea } from "./mockAiClient";
+import { generateIdeaFromServer } from "./api/storyApi";
 import { logAI } from "./logAI";
 import { buildIdeaPrompt, IDEA_PROMPT_VERSION } from "./prompts";
 
 /**
  * 아이디어 생성
- *
- * @param input - 생성 입력 (form + compactedPayload + mode)
- * @returns 생성된 아이디어 결과 (candidates + state)
  */
 export async function generateIdea(
   input: GenerateIdeaInput
@@ -28,14 +30,17 @@ export async function generateIdea(
 
     switch (mode) {
       case "mock":
-        // Mock 모드: 즉시 반환 (비동기 시뮬레이션)
         await simulateDelay(500);
         result = mockGenerateIdea(input);
         break;
 
       case "server":
-        // Server 모드: 향후 구현
-        throw new Error("Server mode not implemented yet");
+        // FastAPI 백엔드 호출
+        result = await generateIdeaFromServer(
+          input.form,
+          input.compactedPayload
+        );
+        break;
 
       default:
         throw new Error(`Unknown mode: ${mode}`);
@@ -43,10 +48,9 @@ export async function generateIdea(
 
     const latencyMs = Date.now() - startTime;
 
-    // 프롬프트 빌드
+    // 프롬프트 빌드 (로깅용 — mock 모드에서도 실제 프롬프트 구조 기록)
     const prompt = buildIdeaPrompt(input);
 
-    // AI 로그 기록
     logAI({
       stage: "idea",
       mode,
@@ -73,11 +77,8 @@ export async function generateIdea(
     return result;
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-
-    // 프롬프트 빌드 (오류 로깅용)
     const prompt = buildIdeaPrompt(input);
 
-    // 오류 로그 기록
     logAI({
       stage: "idea",
       mode,
@@ -88,9 +89,7 @@ export async function generateIdea(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: IDEA_PROMPT_VERSION,
-        inputPayload: {
-          compactedPayload: input.compactedPayload,
-        },
+        inputPayload: { compactedPayload: input.compactedPayload },
       },
     }).catch((err) => {
       console.warn("[generateIdea] Failed to log AI error:", err);
@@ -100,29 +99,21 @@ export async function generateIdea(
   }
 }
 
-/**
- * 비동기 지연 시뮬레이션
- */
 function simulateDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Compacted Payload 생성
- *
- * IdeaFormState에서 undefined/null 제거
+ * IdeaFormState에서 undefined/null 제거한 압축 payload 생성
  */
 export function compactFormPayload(
-  form: Record<string, any>
-): Record<string, any> {
-  const compacted: Record<string, any> = {};
+  form: Record<string, unknown>
+): Record<string, unknown> {
+  const compacted: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(form)) {
     if (value !== undefined && value !== null) {
-      // 배열의 경우 빈 배열 제외
-      if (Array.isArray(value) && value.length === 0) {
-        continue;
-      }
+      if (Array.isArray(value) && value.length === 0) continue;
       compacted[key] = value;
     }
   }

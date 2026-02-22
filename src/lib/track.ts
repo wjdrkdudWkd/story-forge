@@ -2,13 +2,17 @@
  * track.ts
  *
  * 클라이언트 측 이벤트 추적
- * - 이벤트를 /api/events로 전송
- * - 최근 이벤트를 메모리에 링 버퍼로 저장 (디버그용)
+ *
+ * [리팩토링] Next.js API Route(/api/events) 제거됨
+ * → FastAPI 백엔드 POST /api/v1/logs/event 로 직접 전송
+ *
+ * - 최근 이벤트를 메모리 링 버퍼로 저장 (디버그 패널용)
  * - 네트워크 에러 시 1회 재시도
  */
 
 import type { TrackEventInput, EventRecord } from "@/types/events";
 import { getIdentity } from "./identity";
+import { logEvent } from "./api/storyApi";
 
 const APP_VERSION = "1.0.0";
 const RECENT_EVENTS_LIMIT = 50;
@@ -44,36 +48,18 @@ export async function track(input: TrackEventInput): Promise<void> {
     recentEvents.shift();
   }
 
-  // 서버로 전송 (best effort with 1 retry)
+  // 백엔드로 전송 (best effort with 1 retry)
   try {
-    await sendEvent(event);
+    await logEvent(event);
   } catch (error) {
     console.warn("[track] Failed to send event, retrying once...", error);
-    // 1초 후 재시도
     setTimeout(async () => {
       try {
-        await sendEvent(event);
+        await logEvent(event);
       } catch (retryError) {
         console.warn("[track] Retry failed, event dropped:", retryError);
       }
     }, 1000);
-  }
-}
-
-/**
- * 서버로 이벤트 전송
- */
-async function sendEvent(event: EventRecord): Promise<void> {
-  const response = await fetch("/api/events", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(event),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send event: ${response.status}`);
   }
 }
 

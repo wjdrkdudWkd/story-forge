@@ -2,11 +2,17 @@
  * logAI.ts
  *
  * AI 호출 로깅 헬퍼
- * - 클라이언트 사이드에서 AI 호출을 로깅
- * - /api/ai-calls로 전송
+ *
+ * [리팩토링] Next.js API Route(/api/ai-calls) 제거됨
+ * → FastAPI 백엔드 POST /api/v1/logs/ai-call 로 직접 전송
+ *
+ * - 비동기 best-effort (실패해도 앱 동작에 영향 없음)
+ * - 실패 시 1회 재시도 (1초 후)
  */
 
 import { getIdentity } from "./identity";
+import { logAICall } from "./api/storyApi";
+import type { LogAICallRequest } from "./api/storyApi";
 import type { UsageMeta } from "@/types/ai";
 
 export interface LogAIInput {
@@ -26,7 +32,7 @@ export interface LogAIInput {
 }
 
 /**
- * AI 호출을 로깅
+ * AI 호출을 백엔드로 로깅
  * - 비동기로 전송 (best-effort)
  * - 실패해도 앱 동작에 영향 없음
  */
@@ -38,48 +44,32 @@ export async function logAI(input: LogAIInput): Promise<void> {
 
   const { anonId, sessionId } = getIdentity();
 
-  const payload = {
-    anonId,
-    sessionId,
+  const payload: LogAICallRequest = {
+    anon_id: anonId,
+    session_id: sessionId,
     stage: input.stage,
     mode: input.mode,
     model: input.model,
     prompt: input.prompt,
     response: input.response,
-    promptChars: input.prompt.length,
-    responseChars: input.response.length,
-    latencyMs: input.latencyMs,
+    prompt_chars: input.prompt.length,
+    response_chars: input.response.length,
+    latency_ms: input.latencyMs,
     ok: input.ok !== undefined ? input.ok : true,
     error: input.error,
     meta: input.meta,
   };
 
   try {
-    await sendAILog(payload);
+    await logAICall(payload);
   } catch (error) {
-    console.warn("[logAI] Failed to send AI log:", error);
-    // Retry once after 1 second
+    console.warn("[logAI] Failed to send AI log, retrying once...", error);
     setTimeout(async () => {
       try {
-        await sendAILog(payload);
+        await logAICall(payload);
       } catch (retryError) {
         console.warn("[logAI] Retry failed, AI log dropped:", retryError);
       }
     }, 1000);
-  }
-}
-
-/**
- * AI 로그를 서버로 전송
- */
-async function sendAILog(payload: unknown): Promise<void> {
-  const response = await fetch("/api/ai-calls", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send AI log: ${response.status}`);
   }
 }
