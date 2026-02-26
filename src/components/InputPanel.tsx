@@ -1,20 +1,14 @@
-/**
- * InputPanel.tsx
- *
- * 스토리 아이디어 입력 폼
- * - OptionGroup 기반 자동 렌더링
- * - localStorage 자동 저장/복원
- * - Seed 기반 랜덤 생성
- * - Two-column layout: options (left) + preview (right)
- */
-
 "use client";
+
+/**
+ * InputPanel.tsx — Idea 단계
+ * Light (레퍼런스 기준) / Dark 양쪽 지원
+ */
 
 import { useEffect, useState } from "react";
 import type { IdeaFormState } from "@/types/form";
 import type { ToneKey } from "@/types/options";
 import { OptionSelect } from "./OptionSelect";
-import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Check, Shuffle, Sparkles } from "lucide-react";
 import { AppHeader } from "./AppHeader";
@@ -26,19 +20,10 @@ import {
   CHARACTER_OPTIONS,
   PLOT_OPTIONS,
 } from "@/data/options";
-import {
-  seededRandom,
-  weightedRandom,
-  shuffle,
-  generateSeed,
-} from "@/lib/random";
+import { seededRandom, weightedRandom, shuffle, generateSeed } from "@/lib/random";
 
 const STORAGE_KEY = "story-forge:idea-form";
-
-const INITIAL_STATE: IdeaFormState = {
-  tone: "light",
-  realism: 50,
-};
+const INITIAL_STATE: IdeaFormState = { tone: "light", realism: 50 };
 
 export interface InputPanelProps {
   onGenerate?: (form: IdeaFormState) => void;
@@ -48,185 +33,130 @@ export function InputPanel({ onGenerate }: InputPanelProps = {}) {
   const [form, setForm] = useState<IdeaFormState>(INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
 
-  // localStorage 복원 (1회만)
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setForm(parsed);
-      } catch (e) {
-        console.error("Failed to parse saved form", e);
-      }
+      try { setForm(JSON.parse(saved)); } catch {}
     }
     setHydrated(true);
   }, []);
 
-  // localStorage 자동 저장
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
   }, [form, hydrated]);
 
-  // 폼 필드 업데이트
-  const updateField = <K extends keyof IdeaFormState>(
-    key: K,
-    value: IdeaFormState[K]
-  ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  };
+  const updateField = <K extends keyof IdeaFormState>(k: K, v: IdeaFormState[K]) =>
+    setForm((p) => ({ ...p, [k]: v }));
 
-  // 톤 변경
-  const setTone = (tone: ToneKey) => updateField("tone", tone);
-
-  // 리얼리즘 변경
-  const setRealism = (value: number[]) => updateField("realism", value[0]);
-
-  // 랜덤 생성 (영역별)
   const randomize = (scope: "all" | "world" | "character" | "plot" | "motifs") => {
     const seed = form.seed ?? generateSeed();
     const rng = seededRandom(seed);
-
-    const updates: Partial<IdeaFormState> = { seed };
-
-    if (scope === "all" || scope === "world") {
-      WORLD_OPTIONS.forEach((group) => {
-        const selected = weightedRandom(group.options, rng);
-        if (selected) {
-          updates[group.id as keyof IdeaFormState] = selected.key as any;
-        }
+    const upd: Partial<IdeaFormState> = { seed };
+    const apply = (groups: typeof WORLD_OPTIONS) =>
+      groups.forEach((g) => {
+        const sel = weightedRandom(g.options, rng);
+        if (sel) upd[g.id as keyof IdeaFormState] = sel.key as any;
       });
-    }
-
-    if (scope === "all" || scope === "character") {
-      CHARACTER_OPTIONS.forEach((group) => {
-        const selected = weightedRandom(group.options, rng);
-        if (selected) {
-          updates[group.id as keyof IdeaFormState] = selected.key as any;
-        }
-      });
-    }
-
-    if (scope === "all" || scope === "plot") {
-      PLOT_OPTIONS.forEach((group) => {
-        const selected = weightedRandom(group.options, rng);
-        if (selected) {
-          updates[group.id as keyof IdeaFormState] = selected.key as any;
-        }
-      });
-    }
-
+    if (scope === "all" || scope === "world") apply(WORLD_OPTIONS);
+    if (scope === "all" || scope === "character") apply(CHARACTER_OPTIONS);
+    if (scope === "all" || scope === "plot") apply(PLOT_OPTIONS);
     if (scope === "all" || scope === "motifs") {
-      const shuffled = shuffle(MOTIF_OPTIONS.options, rng);
-      updates.motifs_ranked = shuffled.slice(0, 5).map((opt) => opt.key);
+      upd.motifs_ranked = shuffle(MOTIF_OPTIONS.options, rng).slice(0, 5).map((o) => o.key);
     }
-
-    setForm((prev) => ({ ...prev, ...updates }));
+    setForm((p) => ({ ...p, ...upd }));
   };
 
-  if (!hydrated) {
-    return <div className="p-4">로딩 중...</div>;
-  }
+  if (!hydrated) return null;
 
-  // Count selected options for preview
   const selectedCount = [
-    form.world_setting,
-    form.world_era,
-    form.world_scale,
-    form.character_protagonist,
-    form.character_count,
-    form.character_relationship,
-    form.plot_structure,
-    form.plot_conflict,
-    form.plot_ending,
-    ...(form.motifs_ranked || []),
+    form.world_setting, form.world_era, form.world_scale,
+    form.character_protagonist, form.character_count, form.character_relationship,
+    form.plot_structure, form.plot_conflict, form.plot_ending,
+    ...(form.motifs_ranked ?? []),
   ].filter(Boolean).length;
 
+  const card = "rounded-lg border border-gray-200 bg-white shadow-sm dark:border-white/[0.12] dark:bg-white/[0.06] dark:backdrop-blur-xl dark:shadow-xl dark:shadow-black/25";
+  const lb = "text-sm font-medium text-gray-700 dark:text-white/60";
+  const mu = "text-sm text-gray-500 dark:text-white/40";
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+    <div className="min-h-screen bg-white dark:bg-transparent transition-colors duration-200">
       <AppHeader currentStep={{ id: "idea", label: "Idea" }} />
 
-      {/* Page content */}
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Page title */}
         <div className="mb-8">
-          <h1 className="text-4xl font-semibold tracking-tight text-gray-900">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
             Generate Story Ideas
           </h1>
-          <p className="mt-2 text-base text-gray-600">
+          <p className={`mt-2 ${mu}`}>
             Configure your story parameters and generate two unique logline candidates to explore.
           </p>
         </div>
 
-        {/* Two-column grid */}
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          {/* Left column: Story Options */}
+          {/* 왼쪽 */}
           <div className="space-y-6">
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">Story Options</h2>
+            <div className={`${card} p-6`}>
+              <h2 className="mb-5 text-base font-semibold text-gray-900 dark:text-white">Story Options</h2>
 
               {/* Tone */}
-              <div className="mb-6 space-y-2">
-                <label className="text-sm font-medium text-gray-700">Tone</label>
+              <div className="mb-5 space-y-2">
+                <p className={lb}>Tone</p>
                 <div className="flex gap-2">
-                  {(["light", "hard", "bleak"] as ToneKey[]).map((tone) => (
-                    <Button
-                      key={tone}
-                      variant={form.tone === tone ? "default" : "outline"}
-                      onClick={() => setTone(tone)}
-                      size="sm"
-                      className={form.tone === tone ? "bg-green-600 hover:bg-green-700" : ""}
+                  {(["light", "hard", "bleak"] as ToneKey[]).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => updateField("tone", t)}
+                      className={[
+                        "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-all",
+                        form.tone === t
+                          ? "bg-green-500 text-white"
+                          : "border border-gray-200 text-gray-700 hover:border-gray-300 dark:border-white/12 dark:text-white/60 dark:hover:border-white/25",
+                      ].join(" ")}
                     >
-                      {tone === "light" ? "Light" : tone === "hard" ? "Hard" : "Bleak"}
-                    </Button>
+                      {t === "light" ? "Light" : t === "hard" ? "Hard" : "Bleak"}
+                    </button>
                   ))}
                 </div>
               </div>
 
-              {/* Realism Intensity */}
-              <div className="mb-6 space-y-2">
+              {/* Realism */}
+              <div className="mb-5 space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-gray-700">Realism Intensity</label>
-                  <span className="text-sm text-gray-500">{form.realism} / 100</span>
+                  <p className={lb}>Realism Intensity</p>
+                  <span className={mu}>{form.realism} / 100</span>
                 </div>
                 <Slider
                   value={[form.realism]}
-                  onValueChange={setRealism}
-                  min={0}
-                  max={100}
-                  step={1}
-                  className="py-2"
+                  onValueChange={(v) => updateField("realism", v[0])}
+                  min={0} max={100} step={1} className="py-2"
                 />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Gritty</span>
-                  <span>Balanced</span>
+                <div className="flex justify-between text-xs text-gray-400 dark:text-white/30">
+                  <span>Gritty</span><span>Balanced</span>
                 </div>
               </div>
 
-              {/* Seed (Optional) */}
-              <div className="mb-6 space-y-2">
-                <label className="text-sm font-medium text-gray-700">Seed Text (Optional)</label>
+              {/* Seed */}
+              <div className="mb-5 space-y-2">
+                <p className={lb}>Seed Text (Optional)</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Enter a seed phrase..."
-                    value={typeof form.seed === "number" ? String(form.seed) : form.seed || ""}
+                    value={typeof form.seed === "number" ? String(form.seed) : form.seed ?? ""}
                     onChange={(e) => {
-                      const val = e.target.value.trim();
-                      updateField("seed", val ? Number(val) || undefined : undefined);
+                      const v = e.target.value.trim();
+                      updateField("seed", v ? Number(v) || undefined : undefined);
                     }}
-                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                    className="flex-1 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 dark:border-white/12 dark:bg-white/6 dark:text-white/80 dark:placeholder:text-white/30"
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
                     onClick={() => randomize("all")}
-                    className="flex items-center gap-1.5"
+                    className="flex items-center gap-1.5 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:border-gray-300 hover:text-gray-900 transition-colors dark:border-white/12 dark:text-white/50 dark:hover:border-white/25 dark:hover:text-white"
                   >
-                    <Shuffle className="h-4 w-4" />
-                    Random
-                  </Button>
+                    <Shuffle className="h-3.5 w-3.5" /> Random
+                  </button>
                 </div>
               </div>
 
@@ -237,167 +167,123 @@ export function InputPanel({ onGenerate }: InputPanelProps = {}) {
                     key={group.id}
                     group={group}
                     value={form[group.id as keyof IdeaFormState] as string | undefined}
-                    onChange={(value) =>
-                      updateField(group.id as keyof IdeaFormState, value as any)
-                    }
+                    onChange={(v) => updateField(group.id as keyof IdeaFormState, v as any)}
                   />
                 ))}
               </div>
 
               {/* Motifs */}
-              <div className="mt-6 space-y-2">
-                <label className="text-sm font-medium text-gray-700">{MOTIF_OPTIONS.label}</label>
-                {form.motifs_ranked && form.motifs_ranked.length > 0 ? (
+              <div className="mt-5 space-y-2">
+                <p className={lb}>{MOTIF_OPTIONS.label}</p>
+                {form.motifs_ranked?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {form.motifs_ranked.map((key) => {
-                      const option = MOTIF_OPTIONS.options.find((opt) => opt.key === key);
-                      return option ? (
-                        <Chip key={key} variant="default">
-                          {option.label}
-                        </Chip>
-                      ) : null;
+                      const opt = MOTIF_OPTIONS.options.find((o) => o.key === key);
+                      return opt ? <Chip key={key}>{opt.label}</Chip> : null;
                     })}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">Use random buttons to select motifs</p>
+                  <p className={mu}>Use random buttons to select motifs</p>
                 )}
               </div>
 
-              {/* Advanced Options (collapsed) */}
-              <details className="mt-6">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700">
+              {/* Advanced */}
+              <details className="mt-5">
+                <summary className="cursor-pointer text-sm font-medium text-gray-500 hover:text-gray-800 dark:text-white/40 dark:hover:text-white/70 transition-colors">
                   ↓ Advanced Options
                 </summary>
-                <div className="mt-4 space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="ghost" onClick={() => randomize("world")} size="sm">
-                      <Shuffle className="mr-1.5 h-3.5 w-3.5" />
-                      World
-                    </Button>
-                    <Button variant="ghost" onClick={() => randomize("character")} size="sm">
-                      <Shuffle className="mr-1.5 h-3.5 w-3.5" />
-                      Character
-                    </Button>
-                    <Button variant="ghost" onClick={() => randomize("plot")} size="sm">
-                      <Shuffle className="mr-1.5 h-3.5 w-3.5" />
-                      Plot
-                    </Button>
-                    <Button variant="ghost" onClick={() => randomize("motifs")} size="sm">
-                      <Shuffle className="mr-1.5 h-3.5 w-3.5" />
-                      Motifs
-                    </Button>
-                  </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(["world", "character", "plot", "motifs"] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => randomize(s)}
+                      className="flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900 transition-colors dark:border-white/10 dark:text-white/50 dark:hover:border-white/20 dark:hover:text-white"
+                    >
+                      <Shuffle className="h-3 w-3" />
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
                 </div>
               </details>
             </div>
 
-            {/* Generate button */}
             {onGenerate && (
-              <Button
+              <button
                 onClick={() => onGenerate(form)}
-                className="w-full bg-green-600 py-6 text-base hover:bg-green-700"
-                size="lg"
+                className="w-full rounded-lg bg-green-500 hover:bg-green-600 py-3.5 text-sm font-semibold text-white transition-colors flex items-center justify-center gap-2"
               >
-                <Sparkles className="mr-2 h-5 w-5" />
+                <Sparkles className="h-4 w-4" />
                 Generate 2 Logline Candidates
-              </Button>
+              </button>
             )}
           </div>
 
-          {/* Right column: Generation Preview */}
+          {/* 오른쪽 */}
           <div>
-            <div className="sticky top-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
-                  <Sparkles className="h-4 w-4 text-gray-600" />
+            <div className={`sticky top-20 ${card} p-6`}>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 dark:bg-white/10">
+                    <Sparkles className="h-4 w-4 text-gray-500 dark:text-white/60" />
+                  </div>
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                    Generation Preview
+                  </h2>
                 </div>
-                <h2 className="text-lg font-semibold text-gray-900">Generation Preview</h2>
+                <span className="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-500/15 dark:text-green-300">
+                  Ready
+                </span>
               </div>
 
-              <p className="mb-6 text-sm text-gray-600">
-                Based on your selected options, we'll generate:
-              </p>
+              <p className={`mb-5 ${mu}`}>Based on your selected options, we'll generate:</p>
 
-              {/* Generation checklist */}
-              <div className="mb-6 space-y-3">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
-                    <Check className="h-3.5 w-3.5 text-green-600" />
+              <div className="mb-5 space-y-3">
+                {[
+                  { t: "Two unique story loglines", d: "Distinct narrative hooks to choose from" },
+                  { t: "Synopsis for each candidate", d: "Brief narrative summary" },
+                  { t: "Genre & theme tags", d: "Auto-detected story elements" },
+                ].map((item) => (
+                  <div key={item.t} className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/20">
+                      <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white/80">{item.t}</p>
+                      <p className="text-xs text-gray-500 dark:text-white/40">{item.d}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Two unique story loglines</p>
-                    <p className="text-xs text-gray-500">Distinct narrative hooks to choose from</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
-                    <Check className="h-3.5 w-3.5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Synopsis for each candidate</p>
-                    <p className="text-xs text-gray-500">Brief narrative summary</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-green-100">
-                    <Check className="h-3.5 w-3.5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Genre & theme tags</p>
-                    <p className="text-xs text-gray-500">Auto-detected story elements</p>
-                  </div>
-                </div>
+                ))}
               </div>
 
-              {/* Current Configuration */}
-              <div className="rounded-md bg-gray-50 p-4">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-700">
+              <div className="rounded-md bg-gray-50 p-4 dark:bg-white/[0.04] dark:border dark:border-white/[0.08]">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-white/40">
                   Current Configuration
                 </h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Tone:</span>
-                    <span className="font-medium text-gray-900 capitalize">
-                      {form.tone}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Realism:</span>
-                    <span className="font-medium text-gray-900">{form.realism} / 10</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">World:</span>
-                    <span className="font-medium text-gray-900">
-                      {form.world_setting || "Not selected"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Character:</span>
-                    <span className="font-medium text-gray-900">
-                      {form.character_protagonist || "Not selected"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Plot:</span>
-                    <span className="font-medium text-gray-900">
-                      {form.plot_structure || "Not selected"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Motifs:</span>
-                    <span className="font-medium text-gray-900">
-                      {form.motifs_ranked?.length || 0} selected
-                    </span>
-                  </div>
+                  {[
+                    { l: "Tone",      v: form.tone },
+                    { l: "Realism",   v: `${form.realism} / 100` },
+                    { l: "World",     v: form.world_setting ?? "Not selected" },
+                    { l: "Character", v: form.character_protagonist ?? "Not selected" },
+                    { l: "Plot",      v: form.plot_structure ?? "Not selected" },
+                    { l: "Motifs",    v: `${form.motifs_ranked?.length ?? 0} selected` },
+                  ].map((row) => (
+                    <div key={row.l} className="flex justify-between">
+                      <span className="text-gray-500 dark:text-white/40">{row.l}:</span>
+                      <span className="font-medium capitalize text-gray-900 dark:text-white/70">{row.v}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Last Generation */}
-              <div className="mt-6 rounded-md border border-gray-200 bg-gray-50 p-4">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700">
-                  Last Generation
-                </h3>
-                <p className="text-sm text-gray-600">No generations yet in this session.</p>
+              <div className="mt-4 flex items-center gap-2">
+                <div className="h-1.5 flex-1 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-green-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, (selectedCount / 9) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs text-gray-400 dark:text-white/40">{selectedCount}/9</span>
               </div>
             </div>
           </div>

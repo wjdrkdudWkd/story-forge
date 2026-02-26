@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Tailwind v4: dark: 유틸리티를 .dark 클래스 기반으로 통일
+   기본값(prefers-color-scheme 미디어쿼리) 대신 클래스 셀렉터만 사용 */
+@variant dark (&:where(.dark, .dark *));
+
+/* ══════════════════════════════════════════════════════
+   Story-Forge — Light / Dark theme tokens
+   Light: white bg, gray-900 text, green accent (#22c55e)
+   Dark : black-navy gradient bg, glassmorphism cards
+   ══════════════════════════════════════════════════════ */
+
+/* ── Light (default) ─────────────────────────────── */
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -15,12 +26,15 @@
   --muted-foreground: 215.4 16.3% 46.9%;
   --accent: 210 40% 96.1%;
   --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
   --border: 214.3 31.8% 91.4%;
   --input: 214.3 31.8% 91.4%;
   --ring: 142.1 76.2% 36.3%;
   --radius: 0.5rem;
 }
 
+/* ── Dark ──────────────────────────────────────────── */
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
@@ -36,21 +50,40 @@
   --muted-foreground: 215 20.2% 65.1%;
   --accent: 217.2 32.6% 17.5%;
   --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 142.1 70.6% 45.3%;
 }
 
-* {
-  border-color: hsl(var(--border));
+/* ── Base ─────────────────────────────────────────── */
+
+html {
+  color-scheme: light;
+}
+
+/* 다크 모드: html에 블랙-남색 그라데이션 고정 */
+html.dark {
+  color-scheme: dark;
+  background: linear-gradient(135deg, #0c1220 0%, #0f1e35 55%, #0c1220 100%);
+  min-height: 100%;
 }
 
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.2s, color 0.2s;
 }
 
+/* 다크 모드: body 투명 → html 그라데이션 배경이 비침 */
+html.dark body {
+  background: transparent;
+}
+
+/* ── SVG reset ────────────────────────────────────── */
 svg {
   width: auto;
   height: auto;

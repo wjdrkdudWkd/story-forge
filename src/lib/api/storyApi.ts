@@ -4,19 +4,18 @@
  * Story-Forge 도메인별 API 래퍼
  *
  * FastAPI 백엔드의 /api/v1/... 엔드포인트를 호출합니다.
- * 각 함수는 기존 클라이언트 함수(aiClient, actsClient, blocksClient)와
- * 동일한 입/출력 인터페이스를 유지해 호출부(page.tsx)를 건드리지 않습니다.
  *
  * 엔드포인트 목록:
- *   POST /api/v1/story/idea            → generateIdeaFromServer
- *   POST /api/v1/story/acts            → generateActsFromServer
- *   POST /api/v1/story/blocks/overview → generateBlocksOverviewFromServer
- *   POST /api/v1/story/blocks/detail   → generateBlockDetailFromServer
+ *   GET  /api/v1/projects/density-options   → getDensityOptions
+ *   POST /api/v1/story/idea                 → generateIdeaFromServer
+ *   POST /api/v1/story/acts                 → generateActsFromServer
+ *   POST /api/v1/story/blocks/overview      → generateBlocksOverviewFromServer
+ *   POST /api/v1/story/blocks/detail        → generateBlockDetailFromServer
  *   POST /api/v1/story/blocks/regenerate-overview → regenerateOverviewFromServer
  *   POST /api/v1/story/blocks/expand-overview     → expandOverviewFromServer
  *
- *   POST /api/v1/logs/ai-call          → logAICall
- *   POST /api/v1/logs/event            → logEvent
+ *   POST /api/v1/logs/ai-call              → logAICall
+ *   POST /api/v1/logs/event               → logEvent
  */
 
 import { apiClient } from "./apiClient";
@@ -24,19 +23,20 @@ import type { IdeaFormState, CompactedFormPayload } from "@/types/form";
 import type { IdeaResult, IdeaState } from "@/types/idea";
 import type { ActsResult } from "@/types/acts";
 import type {
+  DensityOption,
+  DensityOptionsResponse,
   BlocksDraft,
   BlockOverviewVariant,
   BlockDetailVariant,
   BlockIndex,
   BlockSpec,
-  BlockOverviewVariant as OverviewVariant,
   ExpandPreset,
   BlocksMemory,
 } from "@/types/blocks";
 import type { EventRecord } from "@/types/events";
 
 // ─────────────────────────────────────────────────────────────────
-// DTOs: 백엔드 요청 / 응답 구조 (FastAPI Pydantic 모델과 1:1 대응)
+// DTOs
 // ─────────────────────────────────────────────────────────────────
 
 /** POST /api/v1/story/idea - Request */
@@ -50,14 +50,21 @@ export interface GenerateActsRequest {
   logline: string;
   synopsis: string;
   state: IdeaState;
+  /** 선택된 밀도로부터 결정된 목표 막 수 (3 | 4 | 5) */
+  act_count: number;
 }
 
-/** POST /api/v1/story/blocks/overview - Request */
+/**
+ * POST /api/v1/story/blocks/overview - Request
+ * [리팩토링] density_id 파라미터 추가
+ */
 export interface GenerateBlocksOverviewRequest {
   logline: string;
   synopsis: string;
   tags: string[];
   state: IdeaState;
+  /** 사용자가 선택한 밀도 옵션 ID */
+  density_id: string;
   acts?: ActsResult;
 }
 
@@ -65,7 +72,7 @@ export interface GenerateBlocksOverviewRequest {
 export interface GenerateBlockDetailRequest {
   block_index: BlockIndex;
   spec: BlockSpec;
-  overview: OverviewVariant;
+  overview: BlockOverviewVariant;
   state: IdeaState;
   memory: BlocksMemory;
   preset?: ExpandPreset;
@@ -76,16 +83,22 @@ export interface GenerateBlockDetailRequest {
 export interface RegenerateOverviewRequest {
   block_index: BlockIndex;
   spec: BlockSpec;
-  current_overview: OverviewVariant;
+  current_overview: BlockOverviewVariant;
   state: IdeaState;
   memory: BlocksMemory;
+  /**
+   * 브랜치 재생성 시 부모 노드 ID 컨텍스트
+   * 형식: "#N-A" (예: "#7-A") — 대안 시나리오 트래킹용
+   * 일반 재생성 시 생략
+   */
+  branch_id?: string;
 }
 
 /** POST /api/v1/story/blocks/expand-overview - Request */
 export interface ExpandOverviewRequest {
   block_index: BlockIndex;
   spec: BlockSpec;
-  current_overview: OverviewVariant;
+  current_overview: BlockOverviewVariant;
   preset: ExpandPreset;
   state: IdeaState;
   memory: BlocksMemory;
@@ -112,7 +125,24 @@ export interface LogAICallRequest {
 export type LogEventRequest = EventRecord;
 
 // ─────────────────────────────────────────────────────────────────
-// Story Generation API 함수들
+// Density Options API
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * 밀도 옵션 목록 조회
+ * GET /api/v1/projects/density-options
+ *
+ * 5막 완료 후 블록 단계 진입 전에 호출합니다.
+ * 응답: { options: DensityOption[], default_id: string }
+ */
+export async function getDensityOptions(): Promise<DensityOptionsResponse> {
+  return apiClient.get<DensityOptionsResponse>(
+    "/api/v1/projects/density-options"
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Story Generation API
 // ─────────────────────────────────────────────────────────────────
 
 /**
@@ -131,27 +161,33 @@ export async function generateIdeaFromServer(
 }
 
 /**
- * 5막 구조 생성
+ * 막 구조 생성 (actCount 기반 가변)
  * POST /api/v1/story/acts
+ *
+ * [리팩토링] act_count 파라미터 추가 — 서버가 actCount에 따라 3/4/5막 구조 생성
  */
 export async function generateActsFromServer(
   logline: string,
   synopsis: string,
-  state: IdeaState
+  state: IdeaState,
+  actCount: number = 5
 ): Promise<ActsResult> {
-  const requestBody: GenerateActsRequest = { logline, synopsis, state };
+  const requestBody: GenerateActsRequest = { logline, synopsis, state, act_count: actCount };
   return apiClient.post<ActsResult>("/api/v1/story/acts", requestBody);
 }
 
 /**
- * 24블록 개요 생성
+ * 블록 개요 생성 (가변 밀도)
  * POST /api/v1/story/blocks/overview
+ *
+ * [리팩토링] density_id 포함
  */
 export async function generateBlocksOverviewFromServer(
   logline: string,
   synopsis: string,
   tags: string[],
   state: IdeaState,
+  densityId: string,
   acts?: ActsResult
 ): Promise<BlocksDraft> {
   const requestBody: GenerateBlocksOverviewRequest = {
@@ -159,6 +195,7 @@ export async function generateBlocksOverviewFromServer(
     synopsis,
     tags,
     state,
+    density_id: densityId,
     acts,
   };
   return apiClient.post<BlocksDraft>(
@@ -196,7 +233,7 @@ export async function generateBlockDetailFromServer(
 }
 
 /**
- * 블록 개요 재생성
+ * 블록 개요 재생성 (일반)
  * POST /api/v1/story/blocks/regenerate-overview
  */
 export async function regenerateOverviewFromServer(
@@ -212,6 +249,41 @@ export async function regenerateOverviewFromServer(
     current_overview: currentOverview,
     state,
     memory,
+  };
+  return apiClient.post<BlockOverviewVariant>(
+    "/api/v1/story/blocks/regenerate-overview",
+    requestBody
+  );
+}
+
+/**
+ * 브랜치 노드 재생성 (AI 가지치기)
+ * POST /api/v1/story/blocks/regenerate-overview
+ *
+ * 기존 재생성과 동일한 엔드포인트를 사용하지만
+ * branch_id 컨텍스트를 추가로 전달합니다.
+ *
+ * 브랜치 ID 체계: "#N-A" ~ "#N-Z", "#N-AA" ...
+ *   N: 블록 인덱스 (1-based)
+ *   suffix: A=첫 번째 브랜치, B=두 번째 브랜치 ...
+ *
+ * @param branchId  "#7-A" 형식의 브랜치 ID
+ */
+export async function branchRegenerateOverviewFromServer(
+  blockIndex: BlockIndex,
+  spec: BlockSpec,
+  currentOverview: BlockOverviewVariant,
+  state: IdeaState,
+  memory: BlocksMemory,
+  branchId: string
+): Promise<BlockOverviewVariant> {
+  const requestBody: RegenerateOverviewRequest = {
+    block_index: blockIndex,
+    spec,
+    current_overview: currentOverview,
+    state,
+    memory,
+    branch_id: branchId,
   };
   return apiClient.post<BlockOverviewVariant>(
     "/api/v1/story/blocks/regenerate-overview",
@@ -246,7 +318,7 @@ export async function expandOverviewFromServer(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Logging API 함수들
+// Logging API
 // ─────────────────────────────────────────────────────────────────
 
 /**
@@ -255,7 +327,7 @@ export async function expandOverviewFromServer(
  */
 export async function logAICall(payload: LogAICallRequest): Promise<void> {
   await apiClient.post<void>("/api/v1/logs/ai-call", payload, {
-    withIdentity: false, // 이미 payload에 포함됨
+    withIdentity: false,
   });
 }
 
@@ -265,6 +337,6 @@ export async function logAICall(payload: LogAICallRequest): Promise<void> {
  */
 export async function logEvent(event: LogEventRequest): Promise<void> {
   await apiClient.post<void>("/api/v1/logs/event", event, {
-    withIdentity: false, // 이미 payload에 포함됨
+    withIdentity: false,
   });
 }

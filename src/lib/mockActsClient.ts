@@ -1,58 +1,55 @@
 /**
  * mockActsClient.ts
  *
- * Mock 5막 구조 생성기 - 실제 AI 호출 없이 ActsResult 생성
+ * Mock 막(Act) 구조 생성기 - 실제 AI 호출 없이 ActsResult 생성
  * Seed 기반으로 동일한 입력 → 동일한 결과 보장
+ *
+ * [리팩토링] actCount(3/4/5) 기반 가변 막 수 지원
+ * - 3막: setup / crisis / resolution
+ * - 4막: setup / progress / crisis / resolution
+ * - 5막: setup / progress / crisis / climax / resolution
  */
 
 import type { GenerateActsInput, ActsResult, Act, ActKey } from "@/types/acts";
 import type { ToneKey } from "@/types/options";
 import { seededRandom } from "./random";
 
-const ACT_TITLES: Record<ActKey, string> = {
-  setup: "1막: 발단",
-  progress: "2막: 전개",
-  crisis: "3막: 위기",
-  climax: "4막: 절정",
-  resolution: "5막: 결말",
+// actCount별 사용할 ActKey 순서
+const ACT_SEQUENCES: Record<number, ActKey[]> = {
+  3: ["setup", "crisis", "resolution"],
+  4: ["setup", "progress", "crisis", "resolution"],
+  5: ["setup", "progress", "crisis", "climax", "resolution"],
 };
 
+// actCount + actIndex 기반 한글 제목
+function buildActTitle(actCount: number, actIndex: number, key: ActKey): string {
+  const koreanLabels: Record<ActKey, string> = {
+    setup:      "발단",
+    progress:   "전개",
+    crisis:     "위기",
+    climax:     "절정",
+    resolution: "결말",
+  };
+  return `${actIndex}막: ${koreanLabels[key]}`;
+}
+
 /**
- * Mock 5막 구조 생성
+ * Mock 막 구조 생성 (actCount 기반 가변)
  */
 export function mockGenerateActs(input: GenerateActsInput): ActsResult {
-  const { logline, synopsis, state } = input;
+  const { logline, synopsis, state, actCount } = input;
   const seed = state.seed;
   const rng = seededRandom(seed);
   const tone = state.tone;
 
-  const acts: Act[] = [
-    {
-      key: "setup",
-      title: ACT_TITLES.setup,
-      summary: generateActSummary("setup", logline, synopsis, tone, rng),
-    },
-    {
-      key: "progress",
-      title: ACT_TITLES.progress,
-      summary: generateActSummary("progress", logline, synopsis, tone, rng),
-    },
-    {
-      key: "crisis",
-      title: ACT_TITLES.crisis,
-      summary: generateActSummary("crisis", logline, synopsis, tone, rng),
-    },
-    {
-      key: "climax",
-      title: ACT_TITLES.climax,
-      summary: generateActSummary("climax", logline, synopsis, tone, rng),
-    },
-    {
-      key: "resolution",
-      title: ACT_TITLES.resolution,
-      summary: generateActSummary("resolution", logline, synopsis, tone, rng),
-    },
-  ];
+  // actCount가 3/4/5가 아닌 경우 5막으로 fallback
+  const sequence = ACT_SEQUENCES[actCount] ?? ACT_SEQUENCES[5];
+
+  const acts: Act[] = sequence.map((key, idx) => ({
+    key,
+    title: buildActTitle(sequence.length, idx + 1, key),
+    summary: generateActSummary(key, logline, synopsis, tone, rng),
+  }));
 
   return { acts, state };
 }

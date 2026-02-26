@@ -1,18 +1,14 @@
-/**
- * OutputPanel.tsx
- *
- * AI 생성 결과를 표시하고 후보 선택을 처리합니다.
- * - Redesigned with side-by-side card layout
- * - Matches reference design system
- */
-
 "use client";
 
+/**
+ * OutputPanel.tsx — Compare Your Candidates
+ * Light (레퍼런스 기준) / Dark 양쪽 지원
+ */
+
 import type { IdeaResult } from "@/types/idea";
-import { Button } from "./ui/button";
 import { AppHeader } from "./AppHeader";
 import { Chip } from "./Chip";
-import { RotateCcw, Check, Lightbulb, Users, BookOpen, Globe, Target, Heart } from "lucide-react";
+import { RotateCcw, Check, Globe, Users, BookOpen, Target, Heart } from "lucide-react";
 
 export interface OutputPanelProps {
   result: IdeaResult;
@@ -21,152 +17,117 @@ export interface OutputPanelProps {
 }
 
 export function OutputPanel({ result, onConfirm, onBack }: OutputPanelProps) {
-  // Icon mapping for candidate types
   const candidateIcons = [
-    { icon: Target, label: "Goal-Driven", color: "text-blue-600" },
-    { icon: Heart, label: "Character-Focused", color: "text-pink-600" },
+    { icon: Target, label: "Goal-Driven",         accent: "text-blue-500 dark:text-blue-400",  iconBg: "bg-blue-50 dark:bg-blue-500/15" },
+    { icon: Heart,  label: "Character-Focused",    accent: "text-pink-500 dark:text-pink-400",  iconBg: "bg-pink-50 dark:bg-pink-500/15" },
   ];
 
+  const card = "flex flex-col rounded-lg border border-gray-200 bg-white shadow-sm dark:border-white/[0.12] dark:bg-white/[0.06] dark:backdrop-blur-xl dark:shadow-xl dark:shadow-black/25";
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+    <div className="min-h-screen bg-white dark:bg-transparent transition-colors duration-200">
       <AppHeader currentStep={{ id: "compare", label: "Compare" }} />
 
-      {/* Page content */}
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Page title */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-semibold tracking-tight text-gray-900">
+        {/* 제목 */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
             Compare Your Candidates
           </h1>
-          <p className="mt-2 text-base text-gray-600">
-            Review the two generated logline & synopsis below and choose the one that best resonates with your story vision.
+          <p className="mt-2 text-sm text-gray-500 dark:text-white/50">
+            Review the two generated loglines & synopses and choose the one that best resonates with your story vision.
           </p>
         </div>
 
-        {/* Top chips row */}
-        <div className="mb-6 flex flex-wrap items-center gap-3">
-          <Chip icon={Check} variant="success">
-            Idea
-          </Chip>
-          <Chip icon={Check} variant="success">
-            Generated 3 times
-          </Chip>
-          <Chip icon={Globe} variant="info">
-            Cyberpunk
-          </Chip>
-          <Chip icon={Users} variant="info">
-            Antihero
-          </Chip>
-          <Chip icon={BookOpen} variant="info">
-            Hero
-          </Chip>
-          <Chip icon={Target} variant="info">
-            Redemption
-          </Chip>
-          <Chip icon={Heart} variant="info">
-            Found Family
-          </Chip>
+        {/* 상단 chip row */}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <Chip icon={Check} variant="success">Idea</Chip>
+          <Chip icon={Check} variant="success">Generated</Chip>
+          <Chip icon={Globe}    variant="info">Cyberpunk</Chip>
+          <Chip icon={Users}    variant="info">Antihero</Chip>
+          <Chip icon={BookOpen} variant="info">Hero</Chip>
+          <Chip icon={Target}   variant="info">Redemption</Chip>
+          <Chip icon={Heart}    variant="info">Found Family</Chip>
         </div>
 
-        {/* Candidate cards (side-by-side) */}
+        {/* 후보 카드 */}
         <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {result.candidates.map((candidate, index) => {
-            const iconData = candidateIcons[index] || candidateIcons[0];
-            const Icon = iconData.icon;
-
+            const ic = candidateIcons[index] ?? candidateIcons[0];
+            const Icon = ic.icon;
             return (
-              <div
-                key={index}
-                className="flex flex-col rounded-lg border border-gray-200 bg-white shadow-sm"
-              >
-                {/* Card header */}
-                <div className="border-b border-gray-200 p-6">
-                  <div className="mb-3 flex items-center gap-3">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 ${iconData.color}`}>
+              <div key={index} className={card}>
+                {/* 카드 헤더 */}
+                <div className="border-b border-gray-100 p-6 dark:border-white/8">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-full ${ic.iconBg} ${ic.accent}`}>
                       <Icon className="h-5 w-5" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        {index + 1}
+                      <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                        Candidate {index + 1}
                       </h2>
-                      <p className="text-xs text-gray-500">{iconData.label}</p>
+                      <p className="text-xs text-gray-400 dark:text-white/40">{ic.label}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Card body */}
-                <div className="flex-1 space-y-6 p-6">
-                  {/* Logline */}
+                {/* 카드 바디 */}
+                <div className="flex-1 space-y-5 p-6">
                   <div>
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-700">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-white/35">
                       Logline
                     </h3>
-                    <p className="text-lg font-medium leading-relaxed text-gray-900">
+                    <p className="text-base font-medium leading-relaxed text-gray-900 dark:text-white/90">
                       {candidate.logline}
                     </p>
                   </div>
-
-                  {/* Synopsis */}
                   <div>
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-700">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-white/35">
                       Synopsis
                     </h3>
-                    <p className="text-sm leading-relaxed text-gray-600">
+                    <p className="text-sm leading-relaxed text-gray-600 dark:text-white/60">
                       {candidate.synopsis}
                     </p>
                   </div>
-
-                  {/* Tags */}
                   <div>
-                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-700">
+                    <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-white/35">
                       Tags
                     </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {candidate.tags.map((tag, tagIndex) => (
-                        <Chip key={tagIndex} variant="default">
-                          {tag}
-                        </Chip>
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidate.tags.map((tag, i) => (
+                        <Chip key={i}>{tag}</Chip>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Card footer (button) */}
-                <div className="border-t border-gray-200 p-6">
-                  <Button
-                    className="w-full bg-green-600 hover:bg-green-700"
+                {/* 카드 푸터 */}
+                <div className="border-t border-gray-100 p-6 dark:border-white/8">
+                  <button
                     onClick={() => onConfirm(index)}
+                    className="w-full rounded-lg bg-green-500 hover:bg-green-600 py-2.5 text-sm font-semibold text-white transition-colors"
                   >
                     Use this idea
-                  </Button>
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Bottom actions */}
-        <div className="flex items-center justify-between">
-          {onBack && (
-            <Button variant="outline" onClick={onBack} className="flex items-center gap-2">
+        {/* 하단 액션 */}
+        {onBack && (
+          <div>
+            <button
+              onClick={onBack}
+              className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900 transition-colors dark:border-white/12 dark:text-white/60 dark:hover:border-white/25 dark:hover:text-white"
+            >
               <RotateCcw className="h-4 w-4" />
               Regenerate Candidates
-            </Button>
-          )}
-          <Button
-            variant="default"
-            className="ml-auto bg-green-600 hover:bg-green-700"
-            onClick={() => onConfirm(0)}
-          >
-            Continue to 5 Acts Outline →
-          </Button>
-        </div>
-
-        {/* [placeholder=left] Back to idea options */}
-        <div className="mt-6 text-center text-sm text-gray-500">
-          [placeholder=left] Back to Idea options
-        </div>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,8 @@ export type EventName =
   | "idea_candidate_selected"
   | "acts_generate_clicked"
   | "acts_generated"
+  | "density_select_entered"
+  | "density_selected"
   | "blocks_overview_generated"
   | "block_opened"
   | "block_detail_generate_clicked"

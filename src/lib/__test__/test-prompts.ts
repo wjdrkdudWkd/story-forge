@@ -39,6 +39,7 @@ const mockActsInput = {
     seed: 12345,
     motifsRanked: ["love", "betrayal"],
   },
+  actCount: 5,
 };
 
 const mockBlocksOverviewInput = {
@@ -60,14 +61,15 @@ const mockBlocksOverviewInput = {
       seed: 12345,
     },
   },
+  densityId: "standard",
   mode: "mock" as const,
 };
 
 const mockBlockDetailInput = {
-  index: 1 as const,
+  index: 1,
   spec: {
-    index: 1 as const,
-    act: 1 as const,
+    index: 1,
+    actIndex: 1,
     title: "Test Block",
     purpose: "Test purpose",
   },

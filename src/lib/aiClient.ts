@@ -11,6 +11,7 @@
  */
 
 import type { GenerateIdeaInput, IdeaResult } from "@/types/idea";
+import type { IdeaFormState } from "@/types/form";
 import { mockGenerateIdea } from "./mockAiClient";
 import { generateIdeaFromServer } from "./api/storyApi";
 import { logAI } from "./logAI";
@@ -107,7 +108,7 @@ function simulateDelay(ms: number): Promise<void> {
  * IdeaFormState에서 undefined/null 제거한 압축 payload 생성
  */
 export function compactFormPayload(
-  form: Record<string, unknown>
+  form: IdeaFormState
 ): Record<string, unknown> {
   const compacted: Record<string, unknown> = {};
 

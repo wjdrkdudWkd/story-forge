@@ -8,11 +8,12 @@
 ## 목차
 
 1. [공통 사항](#1-공통-사항)
-2. [Story Generation API](#2-story-generation-api)
-3. [Logging API](#3-logging-api)
-4. [Pydantic 모델 (전체)](#4-pydantic-모델-전체)
-5. [CORS 설정](#5-cors-설정)
-6. [에러 응답 형식](#6-에러-응답-형식)
+2. [Projects API](#2-projects-api)
+3. [Story Generation API](#3-story-generation-api)
+4. [Logging API](#4-logging-api)
+5. [Pydantic 모델 (전체)](#5-pydantic-모델-전체)
+6. [CORS 설정](#6-cors-설정)
+7. [에러 응답 형식](#7-에러-응답-형식)
 
 ---
 
@@ -40,9 +41,63 @@ Accept:       application/json
 
 ---
 
-## 2. Story Generation API
+## 2. Projects API
 
-### 2-1. 아이디어 생성
+### 2-1. 밀도 옵션 목록 조회
+
+```
+GET /api/v1/projects/density-options
+```
+
+**[창작 흐름 변경]** 이 엔드포인트는 아이디어 확정 직후 — 막 구조 생성 전에 — 호출됩니다.
+사용자가 SelectionPanel에서 구조(간략/표준/상세)를 선택하면, 선택된 `actCount`와 `densityId`가
+막 구조 생성(`POST /acts`) 및 블록 생성(`POST /blocks/overview`)에 모두 전달됩니다.
+
+**Request**
+- Body: 없음
+- Headers: `X-Anon-Id`, `X-Session-Id` (공통 헤더)
+
+**Response Body** `200 OK`
+
+```json
+{
+  "options": [
+    {
+      "id": "compact",
+      "label": "간략 (15블록)",
+      "description": "3막 구조, 블록 15개. 핵심 장면만 구성합니다.",
+      "blockCount": 15,
+      "actCount": 3
+    },
+    {
+      "id": "standard",
+      "label": "표준 (24블록)",
+      "description": "4막 구조, 블록 24개. 균형잡힌 기본 구성입니다.",
+      "blockCount": 24,
+      "actCount": 4
+    },
+    {
+      "id": "detailed",
+      "label": "상세 (30블록)",
+      "description": "5막 구조, 블록 30개. 세밀하게 장면을 분할합니다.",
+      "blockCount": 30,
+      "actCount": 5
+    }
+  ],
+  "default_id": "standard"
+}
+```
+
+> **백엔드 구현 참고:**
+> - `options`는 서버가 지원하는 밀도 옵션 목록입니다. 추가/제거 가능합니다.
+> - `default_id`는 프론트엔드가 초기 선택값으로 사용합니다.
+> - 각 `id`는 `POST /api/v1/story/blocks/overview`의 `density_id`로 전달됩니다.
+
+---
+
+## 3. Story Generation API
+
+### 3-1. 아이디어 생성
 
 ```
 POST /api/v1/story/idea
@@ -118,11 +173,15 @@ POST /api/v1/story/idea
 
 ---
 
-### 2-2. 5막 구조 생성
+### 3-2. 막 구조 생성 (가변 actCount)
 
 ```
 POST /api/v1/story/acts
 ```
+
+> **[리팩토링]** `act_count` 파라미터 추가.
+> 사용자가 SelectionPanel에서 선택한 밀도(`compact=3막 / standard=4막 / detailed=5막`)에 따라
+> 서버가 해당 막 수에 맞는 구조를 생성합니다.
 
 **Request Body**
 
@@ -130,6 +189,7 @@ POST /api/v1/story/acts
 {
   "logline": "선택된 로그라인 텍스트",
   "synopsis": "선택된 시놉시스 텍스트",
+  "act_count": 4,
   "state": {
     "seed": 1234567890,
     "tone": "light",
@@ -140,6 +200,9 @@ POST /api/v1/story/acts
     "motifsRanked": ["redemption"]
   }
 }
+```
+
+> `act_count` 허용값: `3` (간략), `4` (표준), `5` (상세). 기본값 `5`.
 ```
 
 **Response Body** `200 OK`
@@ -181,7 +244,7 @@ POST /api/v1/story/acts
 
 ---
 
-### 2-3. 24블록 개요 생성
+### 3-3. 블록 개요 생성 (가변 밀도)
 
 ```
 POST /api/v1/story/blocks/overview
@@ -195,6 +258,7 @@ POST /api/v1/story/blocks/overview
   "synopsis": "선택된 시놉시스",
   "tags": ["드라마", "성장"],
   "state": { /* IdeaState */ },
+  "density_id": "standard",
   "acts": {
     "acts": [ /* Act[] — 5막 결과, 선택사항 */ ],
     "state": { /* IdeaState */ }
@@ -202,20 +266,25 @@ POST /api/v1/story/blocks/overview
 }
 ```
 
+> `density_id`는 `GET /api/v1/projects/density-options`에서 받은 `option.id` 값입니다.
+> 백엔드는 이 값을 기반으로 몇 막/몇 블록의 스펙을 생성할지 결정합니다.
+
 **Response Body** `200 OK`
 
 ```json
 {
+  "densityId": "standard",
+  "totalActs": 4,
   "specs": [
     {
       "index": 1,
-      "act": 1,
+      "actIndex": 1,
       "title": "일상의 균열",
       "purpose": "주인공의 평범한 일상을 보여주고 핵심 결핍을 암시한다",
       "required": "주인공 소개",
       "deliver": "관객의 공감 형성"
     }
-    /* ... 총 24개 */
+    /* ... blockCount개 (density에 따라 가변) */
   ],
   "blocksByIndex": {
     "1": {
@@ -239,7 +308,7 @@ POST /api/v1/story/blocks/overview
       "detailVariants": [],
       "selectedDetailId": null
     }
-    /* ... 총 24개 키 (1~24) */
+    /* ... blockCount개 키 (density에 따라 가변) */
   },
   "memory": {
     "protagonistGoal": "주인공의 핵심 목표",
@@ -251,9 +320,11 @@ POST /api/v1/story/blocks/overview
 }
 ```
 
+> **`BlockSpec` 변경 사항:** `act: 1|2|3|4` → `actIndex: number` (1-based, 막 수에 따라 가변)
+
 ---
 
-### 2-4. 블록 상세 생성 (기본 / 확장 공통)
+### 3-4. 블록 상세 생성 (기본 / 확장 공통)
 
 ```
 POST /api/v1/story/blocks/detail
@@ -318,11 +389,30 @@ POST /api/v1/story/blocks/detail
 
 ---
 
-### 2-5. 블록 개요 재생성
+### 3-5. 블록 개요 재생성 (일반 / 브랜치 공통)
 
 ```
 POST /api/v1/story/blocks/regenerate-overview
 ```
+
+**브랜치 노드 ID 체계**
+
+AI 재생성/확장으로 생성된 대안 시나리오는 "브랜치 노드"로 캔버스 우측에 배치됩니다.
+
+| 필드 | 형식 | 설명 |
+|------|------|------|
+| React Flow 노드 ID | `block-{N}-branch-{suffix}` | `suffix`: A, B, C, ..., Z, AA, AB, ... |
+| branch_id (API) | `#N-{suffix}` | 예: `#7-A`, `#7-B`, `#12-AA` |
+
+예시:
+- `#7-A` — 블록 7의 첫 번째 대안 시나리오
+- `#7-B` — 블록 7의 두 번째 대안 시나리오
+- `#12-AA` — 블록 12의 27번째 대안 시나리오
+
+캔버스 레이아웃:
+- 메인 트렁크: X=0, Y 증가 방향으로 배치
+- 브랜치: 같은 Y, X += 260px씩 우측으로 배치
+- 트렁크 ↔ 브랜치 연결: Bezier 점선 엣지 (`--`), 에지 레이블에 branch_id 표시
 
 **Request Body**
 
@@ -332,9 +422,13 @@ POST /api/v1/story/blocks/regenerate-overview
   "spec": { /* BlockSpec */ },
   "current_overview": { /* BlockOverviewVariant — 현재 선택된 것 */ },
   "state": { /* IdeaState */ },
-  "memory": { /* BlocksMemory */ }
+  "memory": { /* BlocksMemory */ },
+  "branch_id": "#3-A"
 }
 ```
+
+> `branch_id`는 **브랜치 재생성 시에만** 포함됩니다. 일반 재생성 시 생략합니다.
+> 백엔드는 `branch_id`가 있으면 "대안 시나리오" 로그 태깅에 활용할 수 있습니다.
 
 **Response Body** `200 OK`
 
@@ -353,7 +447,37 @@ POST /api/v1/story/blocks/regenerate-overview
 
 ---
 
-### 2-6. 블록 개요 확장 (프리셋 적용)
+### 3-5-1. 캔버스 인터랙션 명세
+
+> 이 섹션은 프론트엔드 인터랙션 구현 명세입니다. 백엔드 구현에는 영향이 없습니다.
+
+**노드 선택 (Inspector 연동)**
+- 사용자가 노드를 클릭하면 `selectedNodeId` 업데이트
+- 우측 `InspectorPanel`에 해당 노드의 상세 정보 즉시 로드
+- 선택된 노드: 파란 Outline (`ring-2 ring-blue-500`) 강조
+- 캔버스 빈 공간 클릭 시 선택 해제
+
+**인라인 편집**
+- 헤드라인 더블클릭 → `<textarea>` 전환 → Enter(저장) / Escape(취소) / Blur(저장)
+- 훅 더블클릭 → `<input>` 전환 → 빈값 저장 시 훅 삭제
+- Inspector 패널에서도 동일한 편집 가능
+- 변경사항 즉시 `blocksByIndex` 반영 (optimistic update)
+
+**드래그 앤 드롭 퍼시스턴스**
+- `onNodesChange` → `dragging=false` position 변경 감지
+- `draft.nodePositions: Record<nodeId, {x, y}>` 저장
+- 다음 레이아웃 계산 시 `nodePositions`가 기본 좌표보다 우선 적용
+
+**브랜치 생성 흐름**
+1. 노드 hover → 🔄 버튼 클릭
+2. `onRegenerateOverview(blockIndex)` 호출
+3. AI가 새 variant 반환 → `blocksByIndex[index].overviewVariants` 추가
+4. 새 variant는 자동으로 브랜치 노드(X 우측)로 렌더링
+5. 트렁크 ↔ 브랜치 Bezier 점선 엣지 자동 생성
+
+---
+
+### 3-6. 블록 개요 확장 (프리셋 적용)
 
 ```
 POST /api/v1/story/blocks/expand-overview
@@ -389,7 +513,7 @@ POST /api/v1/story/blocks/expand-overview
 
 ---
 
-## 3. Logging API
+## 4. Logging API
 
 > 로깅은 **best-effort**입니다. 실패해도 프론트엔드 동작에 영향이 없습니다.
 > 백엔드는 200이 아닌 응답을 반환해도 괜찮으며, 프론트엔드는 1회 재시도 후 포기합니다.
@@ -486,7 +610,7 @@ POST /api/v1/logs/event
 
 ---
 
-## 4. Pydantic 모델 (전체)
+## 5. Pydantic 모델 (전체)
 
 아래는 FastAPI 백엔드에서 사용할 Pydantic v2 모델 예시입니다.
 
@@ -508,7 +632,7 @@ ExpandPreset = Literal[
     "more_specific", "raise_stakes", "add_emotion", "add_twist", "add_dialogue"
 ]
 VariantSource = Literal["initial", "regenerate", "expand", "generated", "expanded"]
-BlockIndex = Literal[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]
+BlockIndex = int  # 동적 밀도 지원: 가변 블록 수
 
 
 # ──────────────────────────────────────────
@@ -581,13 +705,30 @@ class ActsResult(BaseModel):
 # Blocks
 # ──────────────────────────────────────────
 
+class DensityOption(BaseModel):
+    id: str
+    label: str
+    description: str
+    block_count: int = Field(alias="blockCount")
+    act_count: int = Field(alias="actCount")
+
+    class Config:
+        populate_by_name = True
+
+class DensityOptionsResponse(BaseModel):
+    options: list[DensityOption]
+    default_id: str
+
 class BlockSpec(BaseModel):
     index: BlockIndex
-    act: Literal[1, 2, 3, 4]
+    act_index: int = Field(alias="actIndex")  # 1-based, 막 수에 따라 가변
     title: str
     purpose: str
     required: Optional[str] = None
     deliver: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
 
 class BlockOverviewVariant(BaseModel):
     id: str
@@ -634,6 +775,8 @@ class BlocksMemory(BaseModel):
         populate_by_name = True
 
 class BlocksDraft(BaseModel):
+    density_id: str = Field(alias="densityId")
+    total_acts: int = Field(alias="totalActs")
     specs: list[BlockSpec]
     blocks_by_index: dict[str, BlockNode] = Field(alias="blocksByIndex")
     memory: BlocksMemory
@@ -646,6 +789,7 @@ class GenerateBlocksOverviewRequest(BaseModel):
     synopsis: str
     tags: list[str]
     state: IdeaState
+    density_id: str  # GET /density-options 에서 받은 option.id
     acts: Optional[ActsResult] = None
 
 class GenerateBlockDetailRequest(BaseModel):
@@ -710,7 +854,7 @@ class LogEventRequest(BaseModel):
 
 ---
 
-## 5. CORS 설정
+## 6. CORS 설정
 
 프론트엔드(`http://localhost:3000`)에서 요청하므로 반드시 CORS를 허용해야 합니다.
 
@@ -737,7 +881,7 @@ app.add_middleware(
 
 ---
 
-## 6. 에러 응답 형식
+## 7. 에러 응답 형식
 
 FastAPI 기본 에러 형식(`detail` 필드)을 그대로 사용하면 됩니다.
 프론트엔드의 `apiClient.ts`는 `detail` 또는 `error` 필드를 읽어 에러 메시지를 추출합니다.
@@ -767,13 +911,14 @@ FastAPI 기본 에러 형식(`detail` 필드)을 그대로 사용하면 됩니�
 
 ---
 
-## 7. 엔드포인트 요약표
+## 8. 엔드포인트 요약표
 
 | Method | Path | 기능 | 소비 시간 (참고) |
 |--------|------|------|-----------------|
+| `GET`  | `/api/v1/projects/density-options` | 밀도 옵션 목록 조회 | ~50ms |
 | `POST` | `/api/v1/story/idea` | 아이디어 후보 2개 생성 | ~3-5초 |
 | `POST` | `/api/v1/story/acts` | 5막 구조 생성 | ~2-4초 |
-| `POST` | `/api/v1/story/blocks/overview` | 24블록 개요 생성 | ~5-10초 |
+| `POST` | `/api/v1/story/blocks/overview` | 가변 블록 개요 생성 | ~5-10초 |
 | `POST` | `/api/v1/story/blocks/detail` | 블록 상세 생성 | ~2-3초 |
 | `POST` | `/api/v1/story/blocks/regenerate-overview` | 블록 개요 재생성 | ~2-3초 |
 | `POST` | `/api/v1/story/blocks/expand-overview` | 블록 개요 확장 | ~2-3초 |

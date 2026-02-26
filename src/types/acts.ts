@@ -23,4 +23,6 @@ export interface GenerateActsInput {
   logline: string;
   synopsis: string;
   state: IdeaState;
+  /** 선택된 밀도로부터 결정된 목표 막 수 (3, 4, 5) */
+  actCount: number;
 }

@@ -1,15 +1,12 @@
 /**
  * blocksClient.ts
  *
- * 24블록 생성 클라이언트
+ * 블록 생성 클라이언트
  *
- * [리팩토링]
- * - mock 모드: 기존 mock 함수들 유지 (백엔드 개발 전 테스트용)
- * - server 모드: FastAPI 백엔드 호출
- *   - generateBlocksOverview  → POST /api/v1/story/blocks/overview
- *   - generateBlockDetail     → POST /api/v1/story/blocks/detail
- *   - regenerateOverview      → POST /api/v1/story/blocks/regenerate-overview
- *   - expandOverview          → POST /api/v1/story/blocks/expand-overview
+ * [리팩토링] 동적 밀도(Density) 지원
+ * - generateBlocksOverview: densityId를 입력받아 서버/Mock에 전달
+ * - Mock 모드: 선택된 densityId에 대응하는 MOCK_DENSITY_SPECS를 사용
+ * - Server 모드: FastAPI 백엔드 호출 (density_id 포함)
  */
 
 import type {
@@ -46,7 +43,7 @@ import {
 } from "./prompts";
 
 // ─────────────────────────────────────────────────────────────────
-// 24블록 개요 생성
+// 블록 개요 생성 (가변 밀도 지원)
 // ─────────────────────────────────────────────────────────────────
 
 export async function generateBlocksOverview(
@@ -64,11 +61,12 @@ export async function generateBlocksOverview(
         input.candidate.synopsis,
         input.candidate.tags,
         input.state,
+        input.densityId,   // ← density_id 전달
         input.acts
       );
     } else {
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      result = mockGenerateBlocksOverview(input);
+      result = mockGenerateBlocksOverview(input); // densityId는 mock 내부에서 처리
     }
 
     const latencyMs = Date.now() - startTime;
@@ -80,6 +78,8 @@ export async function generateBlocksOverview(
       prompt,
       response: JSON.stringify({
         blockCount: Object.keys(result.blocksByIndex).length,
+        densityId: result.densityId,
+        totalActs: result.totalActs,
       }),
       model: mode === "mock" ? "mock-blocks-overview-v1" : undefined,
       latencyMs,
@@ -91,6 +91,7 @@ export async function generateBlocksOverview(
           synopsis: input.candidate.synopsis,
           tone: input.state.tone,
           seed: input.state.seed,
+          densityId: input.densityId,
           actKeys: input.acts?.acts.map((act) => act.key),
         },
       },
@@ -113,7 +114,10 @@ export async function generateBlocksOverview(
       error: error instanceof Error ? error.message : String(error),
       meta: {
         promptVersion: BLOCKS_OVERVIEW_PROMPT_VERSION,
-        inputPayload: { logline: input.candidate.logline },
+        inputPayload: {
+          logline: input.candidate.logline,
+          densityId: input.densityId,
+        },
       },
     }).catch((err) => {
       console.warn("[generateBlocksOverview] Failed to log AI error:", err);
@@ -124,7 +128,7 @@ export async function generateBlocksOverview(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 블록 상세 생성 (기본 / 확장 공통)
+// 블록 상세 생성
 // ─────────────────────────────────────────────────────────────────
 
 export async function generateBlockDetail(
@@ -283,7 +287,7 @@ export async function regenerateOverview(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// 블록 개요 확장 (프리셋 적용)
+// 블록 개요 확장 (프리셋)
 // ─────────────────────────────────────────────────────────────────
 
 export async function expandOverview(

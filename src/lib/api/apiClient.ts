@@ -7,9 +7,12 @@
  * - NEXT_PUBLIC_BACKEND_URL 환경변수로 베이스 URL 설정
  * - 공통 헤더 / 에러 처리 / 타임아웃 관리
  * - anonId / sessionId 자동 주입 (X-Anon-Id, X-Session-Id)
+ * - Authorization: Bearer {access_token} 자동 주입 (withAuth 옵션)
+ * - 401 응답 시 refresh token으로 자동 재발급 후 1회 재시도
  */
 
 import { getIdentity } from "@/lib/identity";
+import { authStore } from "@/lib/authStore";
 
 // ─────────────────────────────────────────────
 // 설정
@@ -53,6 +56,11 @@ interface RequestOptions {
   timeoutMs?: number;
   /** anonId / sessionId 헤더 자동 주입 여부 (기본 true) */
   withIdentity?: boolean;
+  /**
+   * Authorization: Bearer 헤더 자동 주입 여부 (기본 true)
+   * 인증 엔드포인트(signup/login/refresh)는 false로 설정
+   */
+  withAuth?: boolean;
 }
 
 // ─────────────────────────────────────────────
@@ -72,6 +80,14 @@ function buildHeaders(options?: RequestOptions): Record<string, string> {
     headers["X-Session-Id"] = sessionId;
   }
 
+  // Authorization: Bearer 헤더 주입
+  if (options?.withAuth !== false && typeof window !== "undefined") {
+    const token = authStore.getAccessToken();
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+  }
+
   if (options?.headers) {
     Object.assign(headers, options.headers);
   }
@@ -88,11 +104,36 @@ async function parseErrorBody(response: Response): Promise<string> {
   }
 }
 
+/**
+ * 토큰 갱신 전용 내부 함수 (authClient 순환참조 방지를 위해 fetch 직접 호출)
+ * 성공 시 새 토큰을 authStore에 저장하고 true 반환
+ */
+async function tryRefreshToken(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const refreshToken = authStore.getRefreshToken();
+  if (!refreshToken) return false;
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!resp.ok) return false;
+    const tokens = await resp.json();
+    authStore.setTokens(tokens.access_token, tokens.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request<T>(
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
-  options?: RequestOptions
+  options?: RequestOptions,
+  _isRetry = false
 ): Promise<T> {
   const url = `${BACKEND_URL}${path}`;
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -109,6 +150,24 @@ async function request<T>(
     });
 
     clearTimeout(timer);
+
+    // ── 401 자동 갱신 (withAuth=true인 경우, 1회만) ──────────────
+    if (
+      response.status === 401 &&
+      options?.withAuth !== false &&
+      !_isRetry &&
+      typeof window !== "undefined"
+    ) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        // 새 토큰으로 원래 요청 재시도
+        return request<T>(method, path, body, options, true);
+      }
+      // 갱신 실패 → 로그아웃 이벤트 발행 (authContext에서 수신)
+      authStore.clear();
+      window.dispatchEvent(new Event("sf:auth:expired"));
+      throw new ApiError(401, "AUTH_EXPIRED", "인증이 만료되었습니다. 다시 로그인해주세요.");
+    }
 
     if (!response.ok) {
       const message = await parseErrorBody(response);

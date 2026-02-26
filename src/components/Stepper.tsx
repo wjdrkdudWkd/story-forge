@@ -1,7 +1,11 @@
+"use client";
+
 /**
  * Stepper.tsx
  *
- * Pill-based step navigation with chevrons
+ * Pill-based step navigation
+ * Light: white bg, 현재 단계 초록 pill
+ * Dark : 현재 단계 초록 pill, 나머지 흰 반투명
  */
 
 import React from "react";
@@ -19,7 +23,7 @@ export interface StepperProps {
 
 export function Stepper({ steps, currentStep }: StepperProps) {
   return (
-    <nav className="flex items-center justify-center gap-1">
+    <nav className="flex items-center gap-0.5">
       {steps.map((step, index) => {
         const isActive = currentStep?.id === step.id;
         const isPast =
@@ -29,24 +33,22 @@ export function Stepper({ steps, currentStep }: StepperProps) {
         return (
           <React.Fragment key={step.id}>
             {/* Step pill */}
-            <div
-              className={`
-                rounded-full px-3 py-1 text-sm font-medium transition-colors
-                ${
-                  isActive
-                    ? "bg-green-600 text-white"
-                    : isPast
-                      ? "bg-green-100 text-green-700"
-                      : "bg-gray-100 text-gray-600"
-                }
-              `}
+            <span
+              className={[
+                "rounded-full px-3 py-1 text-xs font-semibold transition-all duration-150",
+                isActive
+                  ? "bg-green-500 text-white"
+                  : isPast
+                    ? /* light past */ "text-green-600 dark:text-green-400"
+                    : /* light future */ "text-gray-400 dark:text-white/35",
+              ].join(" ")}
             >
               {step.label}
-            </div>
+            </span>
 
-            {/* Chevron separator (not after last step) */}
+            {/* Chevron separator */}
             {index < steps.length - 1 && (
-              <ChevronRight className="h-4 w-4 text-gray-400" />
+              <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-gray-300 dark:text-white/20" />
             )}
           </React.Fragment>
         );

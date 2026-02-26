@@ -27,11 +27,12 @@ export async function generateActs(
     let result: ActsResult;
 
     if (mode === "server") {
-      // FastAPI 백엔드 호출
+      // FastAPI 백엔드 호출 (actCount 포함)
       result = await generateActsFromServer(
         input.logline,
         input.synopsis,
-        input.state
+        input.state,
+        input.actCount
       );
     } else {
       // Mock 모드
@@ -59,6 +60,7 @@ export async function generateActs(
           synopsis: input.synopsis,
           tone: input.state.tone,
           motifsRanked: input.state.motifsRanked,
+          actCount: input.actCount,
         },
       },
     }).catch((err) => {

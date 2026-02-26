@@ -1,8 +1,13 @@
 /**
  * mockBlocksClient.ts
  *
- * Mock 24블록 생성기 - 실제 AI 호출 없이 BlocksDraft 생성
+ * Mock 블록 생성기 - 실제 AI 호출 없이 BlocksDraft 생성
  * Seed 기반으로 동일한 입력 → 동일한 결과 보장
+ *
+ * [리팩토링] 동적 밀도(Density) 지원
+ * - 고정 BLOCK_SPECS import 제거
+ * - densityId에 따라 MOCK_DENSITY_SPECS에서 스펙 선택
+ * - BlockSpec.act → BlockSpec.actIndex 변경
  */
 
 import type {
@@ -20,17 +25,68 @@ import type {
 } from "@/types/blocks";
 import type { ToneKey } from "@/types/options";
 import { seededRandom } from "./random";
-import { BLOCK_SPECS } from "@/data/blockSpecs";
+
+// ─────────────────────────────────────────────────────────────────
+// Mock 밀도별 스펙 세트
+// 서버에서 GET /density-options 로 받아올 옵션에 대응하는 Mock 데이터
+// ─────────────────────────────────────────────────────────────────
+
+/** 밀도 ID별 블록 스펙 생성 함수 */
+function buildMockSpecs(blockCount: number, actCount: number): BlockSpec[] {
+  const specs: BlockSpec[] = [];
+  const blocksPerAct = Math.floor(blockCount / actCount);
+  const remainder = blockCount % actCount;
+
+  let blockIndex = 1;
+  for (let actIdx = 1; actIdx <= actCount; actIdx++) {
+    const count = blocksPerAct + (actIdx <= remainder ? 1 : 0);
+    for (let b = 0; b < count; b++) {
+      specs.push({
+        index: blockIndex,
+        actIndex: actIdx,
+        title: `블록 ${blockIndex}`,
+        purpose: `${actIdx}막 ${b + 1}번째 장면`,
+      });
+      blockIndex++;
+    }
+  }
+  return specs;
+}
 
 /**
- * Mock 24블록 개요 생성
+ * densityId → BlockSpec[] 매핑
+ * 실제 서버에서는 백엔드가 density_id를 받아 적절한 스펙을 생성합니다.
+ */
+function getMockSpecsForDensity(densityId: string): BlockSpec[] {
+  switch (densityId) {
+    case "compact":
+      return buildMockSpecs(15, 3);
+    case "standard":
+      return buildMockSpecs(24, 4);
+    case "detailed":
+      return buildMockSpecs(30, 5);
+    default:
+      return buildMockSpecs(24, 4); // fallback: standard
+  }
+}
+
+/**
+ * Mock 블록 개요 생성 (가변 밀도 지원)
+ *
+ * densityId가 없으면 "standard"(24블록/4막)으로 fallback합니다.
  */
 export function mockGenerateBlocksOverview(
   input: GenerateBlocksOverviewInput
 ): BlocksDraft {
-  const { candidate, state, acts } = input;
+  const { candidate, state, acts, densityId = "standard" } = input;
   const seed = state.seed;
   const rng = seededRandom(seed);
+
+  // densityId에 맞는 스펙 선택
+  const specs = getMockSpecsForDensity(densityId);
+  const totalActs = specs.length > 0
+    ? Math.max(...specs.map((s) => s.actIndex))
+    : 4;
 
   // Memory 초기화
   const memory: BlocksMemory = {
@@ -41,17 +97,18 @@ export function mockGenerateBlocksOverview(
     lastHooks: [],
   };
 
-  // 24개 블록 생성
+  // 가변 블록 생성
   const blocksByIndex: Record<number, BlockNode> = {};
 
-  for (let i = 0; i < BLOCK_SPECS.length; i++) {
-    const spec = BLOCK_SPECS[i];
+  for (let i = 0; i < specs.length; i++) {
+    const spec = specs[i];
     const overview = generateInitialOverview(
       spec,
       candidate,
       state,
       memory,
-      rng
+      rng,
+      totalActs
     );
 
     blocksByIndex[spec.index] = {
@@ -66,8 +123,10 @@ export function mockGenerateBlocksOverview(
   }
 
   return {
-    specs: BLOCK_SPECS,
+    densityId,
+    specs,
     blocksByIndex,
+    totalActs,
     memory,
   };
 }
@@ -151,10 +210,11 @@ function generateInitialOverview(
   candidate: any,
   state: any,
   memory: BlocksMemory,
-  rng: () => number
+  rng: () => number,
+  totalActs: number
 ): BlockOverviewVariant {
-  const headline = generateHeadline(spec, state.tone, memory, rng);
-  const hooks = generateHooks(spec, state.tone, memory, rng);
+  const headline = generateHeadline(spec, state.tone, memory, rng, totalActs);
+  const hooks = generateHooks(spec, state.tone, memory, rng, totalActs);
 
   return {
     id: crypto.randomUUID(),
@@ -169,9 +229,10 @@ function generateHeadline(
   spec: BlockSpec,
   tone: ToneKey,
   memory: BlocksMemory,
-  rng: () => number
+  rng: () => number,
+  totalActs: number = 4
 ): string {
-  const templates = getHeadlineTemplates(spec, tone);
+  const templates = getHeadlineTemplates(spec, tone, totalActs);
   const idx = Math.floor(rng() * templates.length);
   return templates[idx];
 }
@@ -180,7 +241,8 @@ function generateHooks(
   spec: BlockSpec,
   tone: ToneKey,
   memory: BlocksMemory,
-  rng: () => number
+  rng: () => number,
+  totalActs: number = 4
 ): string[] {
   const hookCount = Math.floor(rng() * 2) + 1; // 1~2개
   const hooks: string[] = [];
@@ -248,29 +310,35 @@ function generateMicroHooks(hooks: string[], rng: () => number): string[] {
 // Template Generators
 // ============================================================================
 
-function getHeadlineTemplates(spec: BlockSpec, tone: ToneKey): string[] {
+function getHeadlineTemplates(spec: BlockSpec, tone: ToneKey, totalActs: number): string[] {
   const toneModifier = getToneModifier(tone);
 
-  // Act별 템플릿
-  if (spec.act === 1) {
+  // actIndex 기준으로 이야기 단계 결정 (막 수에 관계없이 3단계로 분류)
+  const actRatio = spec.actIndex / totalActs;
+
+  if (actRatio <= 0.3) {
+    // 초반부 (발단)
     return [
       `${spec.title}: 주인공의 일상이 ${toneModifier.conflict} 사건으로 흔들린다.`,
       `${spec.title}: ${toneModifier.emotion} 분위기 속에서 새로운 변화의 조짐이 보인다.`,
       `${spec.title}: 평범했던 세계에 균열이 생기며 이야기가 시작된다.`,
     ];
-  } else if (spec.act === 2) {
+  } else if (actRatio <= 0.7) {
+    // 중반부 (전개/위기)
     return [
       `${spec.title}: 주인공이 ${toneModifier.conflict} 도전에 직면한다.`,
       `${spec.title}: 새로운 장애물이 나타나며 갈등이 심화된다.`,
       `${spec.title}: ${toneModifier.emotion} 상황 속에서 선택의 순간이 다가온다.`,
     ];
-  } else if (spec.act === 3) {
+  } else if (actRatio <= 0.9) {
+    // 후반부 (절정)
     return [
       `${spec.title}: ${toneModifier.conflict} 위기가 최고조에 달한다.`,
       `${spec.title}: 모든 것이 무너질 듯한 순간, 주인공은 진실을 마주한다.`,
       `${spec.title}: 대립이 격화되며 돌이킬 수 없는 지점에 다다른다.`,
     ];
   } else {
+    // 결말부
     return [
       `${spec.title}: 최후의 대결이 ${toneModifier.ending} 펼쳐진다.`,
       `${spec.title}: 모든 갈등이 수렴하며 결말을 향해 나아간다.`,
