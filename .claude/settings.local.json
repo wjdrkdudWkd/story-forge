@@ -35,7 +35,17 @@
       "Bash(npx next build:*)",
       "Bash(poetry lock:*)",
       "Bash(poetry install:*)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -i :3000 -t)",
+      "Bash(ps -p 15647 -p 29350 -o pid,command)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(lsof -i :3000)",
+      "Bash(lsof -i :3000 -sTCP:LISTEN)",
+      "Bash(ps -p 10193 -o command=)",
+      "Bash(ps -p 15647 -o command=)",
+      "Bash(ps -p 94189 -o command=)",
+      "Bash(npx tsc --noEmit --project tsconfig.json)"
     ]
   }
 }

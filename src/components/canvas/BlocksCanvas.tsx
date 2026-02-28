@@ -36,7 +36,7 @@
 
 'use client';
 
-import { useMemo, useCallback, useState, useRef } from 'react';
+import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useTheme } from '@/lib/theme';
 import {
   ReactFlow,
@@ -45,11 +45,14 @@ import {
   Controls,
   Background,
   BackgroundVariant,
+  Panel,
   type Node,
   type Edge,
   type Connection,
+  type NodeChange,
   MarkerType,
   useReactFlow,
+  applyNodeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -280,6 +283,29 @@ function computeLayout(
     return fallback;
   }
 
+  // ── bottomSourceSet: 확정 경로 에지의 source 노드 집합 ─────────
+  // 각 행의 선택된 variant 노드 중 마지막 행이 아닌 것들 = bottom 핸들 가시 노드
+  const bottomSourceSet = new Set<string>();
+  for (let bi = 0; bi < uniqueRowValues.length - 1; bi++) {
+    const rowVal = uniqueRowValues[bi];
+    const curSpec = sortedSpecs.find((s) => (s.rowIndex ?? s.index) === rowVal);
+    if (!curSpec) continue;
+    const curBlock = draft.blocksByIndex[curSpec.index];
+    if (!curBlock) continue;
+
+    const selId = selectedVariantIdByRow[rowVal];
+    let varIdx = selId
+      ? curBlock.overviewVariants.findIndex((v) => v.id === selId)
+      : 0;
+    if (varIdx < 0) varIdx = 0;
+
+    const srcId =
+      varIdx === 0
+        ? makeMainNodeId(curSpec.index)
+        : makeBranchNodeId(curSpec.index, getBranchSuffix(varIdx - 1));
+    bottomSourceSet.add(srcId);
+  }
+
   // ── 노드 생성 ──────────────────────────────────────────────────
   sortedSpecs.forEach((spec) => {
     const rowSlot = getRowSlot(spec);
@@ -346,8 +372,7 @@ function computeLayout(
       nodes.push({
         id: nodeId,
         type: 'blockNode',
-        position: { x: mainX, y: trunkY },
-        draggable: false,
+        position: draft.nodePositions?.[nodeId] ?? { x: mainX, y: trunkY },
         data: {
           blockIndex: spec.index,
           actIndex: spec.actIndex,
@@ -362,7 +387,8 @@ function computeLayout(
           isActivePath: isActive,
           isNodeSelected: selectedNodeId === nodeId,
           canInsertAfter: canInsert,
-          nextRowIndex,           // ← 다음 행 번호 전달
+          nextRowIndex,
+          outgoingBottomCount: bottomSourceSet.has(nodeId) ? 1 : 0,
           onNodeSelect: () => callbacks.onNodeSelect(nodeId, spec.index),
           onCardClick: () => callbacks.onNodeSelect(nodeId, spec.index),
           onSelectVariant: () =>
@@ -403,8 +429,7 @@ function computeLayout(
       nodes.push({
         id: nodeId,
         type: 'blockNode',
-        position: { x: branchX, y: trunkY },
-        draggable: false,
+        position: draft.nodePositions?.[nodeId] ?? { x: branchX, y: trunkY },
         data: {
           blockIndex: spec.index,
           actIndex: spec.actIndex,
@@ -418,8 +443,9 @@ function computeLayout(
           isCoolingDown: callbacks.isCoolingDown(spec.index),
           isActivePath: isActive,
           isNodeSelected: selectedNodeId === nodeId,
-          canInsertAfter: canInsert, // main과 동일 조건: 마지막 행일 때만 표시
-          nextRowIndex,           // ← 다음 행 번호 전달
+          canInsertAfter: canInsert,
+          nextRowIndex,
+          outgoingBottomCount: bottomSourceSet.has(nodeId) ? 1 : 0,
           onNodeSelect: () => callbacks.onNodeSelect(nodeId, spec.index),
           onCardClick: () => callbacks.onNodeSelect(nodeId, spec.index),
           onSelectVariant: () =>
@@ -803,8 +829,30 @@ function BlocksCanvasInner({
     [draft, onUpdateDraft],
   );
 
-  // ── 드래그 비활성화 (no-op) ──────────────────────────────────
-  const handleNodesChange = useCallback(() => {}, []);
+  // ── 드래그 위치 저장 ─────────────────────────────────────────
+  // React Flow 노드 변화(drag 포함)를 displayNodes에 반영하고,
+  // 드래그가 끝난 시점(dragging=false)의 최종 위치를 draft.nodePositions에 저장
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      // 실시간 drag 반영 (부드러운 이동)
+      setDisplayNodes((nds) => applyNodeChanges(changes, nds));
+
+      // 드래그 종료 위치만 draft에 커밋
+      const posEnds = changes.filter(
+        (c) => c.type === 'position' && !('dragging' in c && c.dragging) && 'position' in c && c.position != null,
+      );
+      if (posEnds.length === 0) return;
+
+      const updated = { ...(draft.nodePositions ?? {}) };
+      posEnds.forEach((c) => {
+        if (c.type === 'position' && 'position' in c && c.position) {
+          updated[c.id] = c.position as { x: number; y: number };
+        }
+      });
+      onUpdateDraft({ ...draft, nodePositions: updated });
+    },
+    [draft, onUpdateDraft],
+  );
 
   // ── 수동 에지 연결 (비활성화) ──────────────────────────────────
   const handleConnect = useCallback((connection: Connection) => {
@@ -876,11 +924,10 @@ function BlocksCanvasInner({
     [draft, onUpdateDraft],
   );
 
-  // ── 레이아웃 계산 ─────────────────────────────────────────────
-  const { nodes, edges, actRects } = useMemo(
+  // ── 레이아웃 계산 (computeLayout → computedNodes) ────────────
+  const { nodes: computedNodes, edges, actRects } = useMemo(
     () =>
       computeLayout(draft, selectedNodeId, activePath, selectedVariantIdByRow, {
-        // Pass selectedVariantIdByRow
         onNodeSelect: handleNodeSelect,
         onSelectVariant: handleSelectVariant,
         onRegenerate: handleRegenerate,
@@ -889,7 +936,7 @@ function BlocksCanvasInner({
         onUpdateHeadline: handleUpdateHeadline,
         onUpdateHooks: handleUpdateHooks,
         isCoolingDown,
-        onSelectVariantInRow: onSelectVariantInRow, // Pass new callback
+        onSelectVariantInRow,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -899,8 +946,27 @@ function BlocksCanvasInner({
       isCoolingDown,
       selectedVariantIdByRow,
       onSelectVariantInRow,
-    ], // Add selectedVariantIdByRow to deps
+    ],
   );
+
+  // ── displayNodes: React Flow에 전달하는 실제 노드 상태 ─────────
+  // computedNodes를 기준으로 하되, 드래그 중인 노드는 현재 위치를 유지
+  const [displayNodes, setDisplayNodes] = useState<Node[]>(computedNodes);
+
+  useEffect(() => {
+    setDisplayNodes((prev) => {
+      const draggingIds = new Set(prev.filter((n) => n.dragging).map((n) => n.id));
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      return computedNodes.map((n) =>
+        draggingIds.has(n.id) ? prevById.get(n.id)! : n,
+      );
+    });
+  }, [computedNodes]);
+
+  // ── 자동 정렬: nodePositions 초기화 → 수식 위치로 복귀 ─────────
+  const handleResetLayout = useCallback(() => {
+    onUpdateDraft({ ...draft, nodePositions: {} });
+  }, [draft, onUpdateDraft]);
 
   // ── 막 레이블 ─────────────────────────────────────────────────
   const actLabels = useMemo(() => {
@@ -947,22 +1013,22 @@ function BlocksCanvasInner({
       />
 
       <ReactFlow
-        nodes={nodes}
+        nodes={displayNodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.15, minZoom: 0.3, maxZoom: 1.2 }}
         minZoom={0.15}
         maxZoom={2}
-        nodesDraggable={false}
-        nodesConnectable={false} // Disable manual connections
+        nodesDraggable={true}
+        nodesConnectable={false}
         elementsSelectable={true}
         panOnScroll
         zoomOnScroll
         zoomOnPinch
         defaultViewport={{ x: 80, y: 40, zoom: 0.7 }}
         onNodesChange={handleNodesChange}
-        onConnect={handleConnect} // Keep handleConnect but it's a no-op now
+        onConnect={handleConnect}
         onPaneClick={() => {
           setSelectedNodeId(null);
           setSelectedBlockIndex(null);
@@ -998,6 +1064,27 @@ function BlocksCanvasInner({
           color={theme === 'dark' ? '#1e3a5f' : '#cbd5e1'}
         />
         <ActGroupBackground actRects={actRects} actLabels={actLabels} />
+
+        {/* ── 자동 정렬 버튼 ─────────────────────────────────────── */}
+        <Panel position="top-right">
+          <button
+            onClick={handleResetLayout}
+            className="
+              flex items-center gap-1.5 px-3 py-1.5
+              text-xs font-medium
+              bg-white/90 dark:bg-slate-800/90
+              border border-gray-200 dark:border-white/10
+              rounded-full shadow-md hover:shadow-lg
+              hover:bg-gray-50 dark:hover:bg-slate-700/90
+              transition-all backdrop-blur-sm cursor-pointer
+            "
+            title="모든 노드를 초기 계산 위치로 재정렬"
+          >
+            <span>⚡</span>
+            자동 정렬
+          </button>
+        </Panel>
+
         <Controls position="bottom-left" showInteractive={false} />
         <MiniMap
           position="bottom-right"

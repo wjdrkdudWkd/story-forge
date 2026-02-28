@@ -65,6 +65,11 @@ export interface BlockNodeData extends Record<string, unknown> {
    */
   canInsertAfter: boolean;
   /**
+   * 하단(bottom) sourceHandle 에서 나가는 확정 경로 엣지 수.
+   * N=0: 핸들 숨김, N=1: 중앙(50%), N≥2: 1/5 간격 분산 배치
+   */
+  outgoingBottomCount: number;
+  /**
    * 이 노드 다음에 삽입될 행(Row) 번호.
    * computeLayout에서 계산하여 전달. 버튼 문구에 활용됨.
    * (예: 현재 rowIndex=3 → nextRowIndex=4)
@@ -249,20 +254,20 @@ function BlockNodeCardInner({ data }: NodeProps) {
   return (
     <div style={inactiveStyle} className="relative">
 
-      {/* ── Top Handle (target) — 수직 흐름 입력 ────────────────── */}
+      {/* ── Top Handle (target) — 엣지 앵커용, 비가시 ────────────── */}
       <Handle
         type="target"
         position={Position.Top}
         id="top"
-        style={{ ...HANDLE_BASE, background: handleBg(d.isActivePath) }}
+        style={{ width: 0, height: 0, opacity: 0, pointerEvents: 'none', border: 'none', background: 'transparent' }}
       />
 
-      {/* ── Left Handle (target) — 브랜치/수평 입력 ─────────────── */}
+      {/* ── Left Handle (target) — 엣지 앵커용, 비가시 ──────────── */}
       <Handle
         type="target"
         position={Position.Left}
         id="left"
-        style={{ ...SIDE_HANDLE_BASE, background: "#a78bfa" }} // Violet-400 (브랜치 전용)
+        style={{ width: 0, height: 0, opacity: 0, pointerEvents: 'none', border: 'none', background: 'transparent' }}
       />
 
       {/* 카드 본체 */}
@@ -470,24 +475,30 @@ function BlockNodeCardInner({ data }: NodeProps) {
         )}
       </div>
 
-      {/* ── Right Handle (source) — 브랜치/수평 출력 ─────────────── */}
-      {/*  v2 채택 시: Right → 다음 블록의 Left(또는 Right)로 연결    */}
+      {/* ── Right Handle (source) — 엣지 앵커용, 비가시 ──────────── */}
       <Handle
         type="source"
         position={Position.Right}
         id="right"
-        style={{ ...SIDE_HANDLE_BASE, background: "#a78bfa" }} // Violet-400
+        style={{ width: 0, height: 0, opacity: 0, pointerEvents: 'none', border: 'none', background: 'transparent' }}
       />
 
       {/* ── 하단 핸들 + AI생성 버튼 영역 ────────────────────────── */}
-      {/* 핸들을 감싸는 wrapper에 넉넉한 hover 영역(pb-6)을 주고,
-          버튼을 absolute로 핸들 위 5px 겹치게 올려 gap 완전 차단 */}
+      {/*
+       * N = outgoingBottomCount
+       *  N=0 → 핸들 비가시(엣지 앵커용으로 유지), 버튼 표시 가능
+       *  N=1 → 중앙(50%) 단일 핸들
+       *  N≥2 → 중앙 기준 1/5(20%) 간격 분산 배치
+       *
+       * id='bottom' 핸들은 항상 렌더링(엣지 sourceHandle='bottom' 앵커용)
+       * 추가 핸들: id='bottom-1', 'bottom-2' ...
+       */}
       <div
         className="relative flex justify-center pb-6"
         onMouseEnter={() => setShowInsertBtn(true)}
         onMouseLeave={() => setShowInsertBtn(false)}
       >
-        {/* Bottom 핸들 — 절대 위치로 wrapper 하단에 고정 */}
+        {/* 주 bottom 핸들 — 항상 존재(엣지 앵커), outgoingBottomCount≥1 일 때만 가시 */}
         <Handle
           type="source"
           position={Position.Bottom}
@@ -497,14 +508,44 @@ function BlockNodeCardInner({ data }: NodeProps) {
             background: handleBg(d.isActivePath),
             position: "absolute",
             bottom: 0,
-            left: "50%",
-            transform: "translateX(-50%)",
+            left: d.outgoingBottomCount >= 2
+              ? `${50 + (0 - (d.outgoingBottomCount - 1) / 2) * 20}%`
+              : "50%",
             top: "auto",
+            transform: "translateX(-50%)",
+            pointerEvents: "none",
+            ...(d.outgoingBottomCount === 0
+              ? { width: 0, height: 0, opacity: 0, border: "none" }
+              : {}),
           }}
         />
 
-        {/* "+ 이어지는 N장면 블록 생성" 버튼
-            — bottom:4px 로 핸들 위 5px 겹치게 올려 hover 유실 원천 차단 */}
+        {/* N≥2 추가 핸들 분산 배치 */}
+        {d.outgoingBottomCount >= 2 &&
+          Array.from({ length: d.outgoingBottomCount - 1 }, (_, i) => {
+            const N = d.outgoingBottomCount;
+            const leftPct = 50 + ((i + 1) - (N - 1) / 2) * 20;
+            return (
+              <Handle
+                key={`bottom-${i + 1}`}
+                type="source"
+                position={Position.Bottom}
+                id={`bottom-${i + 1}`}
+                style={{
+                  ...HANDLE_BASE,
+                  background: handleBg(d.isActivePath),
+                  position: "absolute",
+                  bottom: 0,
+                  left: `${leftPct}%`,
+                  top: "auto",
+                  transform: "translateX(-50%)",
+                  pointerEvents: "none",
+                }}
+              />
+            );
+          })}
+
+        {/* "+ 이어지는 N장면 블록 생성" 버튼 — 핸들 위 hover 영역 겹치게 배치 */}
         {d.canInsertAfter && (
           <button
             className={[

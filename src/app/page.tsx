@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
+import { ModeSelectionScreen } from '@/components/ModeSelectionScreen';
+import { InfiniteGameEditor } from '@/components/infinite/InfiniteGameEditor';
 import { AuthPanel } from '@/components/AuthPanel';
 import { ApiError, NetworkError } from '@/lib/api/apiClient';
 import { InputPanel } from '@/components/InputPanel';
@@ -150,6 +152,12 @@ function shiftColumnsGlobally(
 
 export default function Home() {
   const { isAuthenticated, loading: authLoading } = useAuth();
+
+  // ── 앱 모드 라우팅 ──────────────────────────────────────────────
+  // 'home'     → 모드 선택 화면 (ModeSelectionScreen)
+  // 'standard' → 기존 스텝 마법사 (Standard Mode)
+  // 'infinite' → 무한 캔버스 (Story Forge: Infinite)
+  const [appMode, setAppMode] = useState<'home' | 'standard' | 'infinite'>('home');
 
   const [viewState, setViewState] = useState<ViewState>('input');
   const [result, setResult] = useState<IdeaResult | null>(null);
@@ -927,6 +935,15 @@ export default function Home() {
   if (!isAuthenticated) {
     return <AuthPanel />;
   }
+
+  // ── 모드 라우팅 (기존 Standard 로직을 건드리지 않음) ──────────────
+  if (appMode === 'home') {
+    return <ModeSelectionScreen onSelect={setAppMode} />;
+  }
+  if (appMode === 'infinite') {
+    return <InfiniteGameEditor onBack={() => setAppMode('home')} />;
+  }
+  // appMode === 'standard' → 기존 return 그대로 사용
 
   return (
     <main className="min-h-screen p-8">
